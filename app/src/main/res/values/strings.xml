@@ -1,0 +1,89 @@
+<resources>
+    <string name="app_name">MineSafe AR</string>
+    <string name="app_subtitle">COAL MINE SAFETY TRAINING</string>
+    <string name="vocational_safety_training">Vocational Safety Training</string>
+    
+    <!-- Modules -->
+    <string name="module_1_title">MODULE 01: ELECTRICAL FIRE SAFETY</string>
+    <string name="module_1_desc">Substation electrical fire hazard, rapid traversal, extinguisher nozzle engagement, and base suppression.</string>
+    <string name="module_2_title">MODULE 02: CHEMICAL HAZARD RESPONSE</string>
+    <string name="module_2_desc">Pressurized corrosive vapor breach, danger zone perimeter containment, and emergency isolation procedure.</string>
+    
+    <!-- Navigation and General Actions -->
+    <string name="start_training">START TRAINING</string>
+    <string name="select_module">SELECT MODULE</string>
+    <string name="settings">SETTINGS</string>
+    <string name="help">HELP</string>
+    <string name="sound">SOUND</string>
+    <string name="sound_on">Sound: ON</string>
+    <string name="sound_off">Sound: MUTED</string>
+    <string name="language">Language</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी</string>
+    <string name="restart_training">RETRY TRAINING</string>
+    <string name="back_to_home">BACK TO MODULES</string>
+    <string name="close">CLOSE</string>
+    
+    <!-- AR Doorway & Placement HUD -->
+    <string name="score_label">Score: %1$d/100</string>
+    <string name="time_label">Time: %1$d:%2$02d</string>
+    <string name="hud_title">MINE SAFE AR</string>
+    <string name="hud_subtitle">COAL MINE TRAINING</string>
+    <string name="scan_title">Scan floor and tap to place Doorway.</string>
+    <string name="scan_desc">Find a flat surface and place the mine entrance.</string>
+    <string name="tap_to_place_floor">TAP TO PLACE</string>
+    <string name="tap_to_place_toast">Tap on the highlighted area to place the doorway</string>
+    <string name="door_distance">Doorway: %1$.2f m</string>
+    <string name="target_distance">Target: %1$.1f m</string>
+    <string name="ar_tracking_lost">Tracking lost. Move phone slowly across the floor.</string>
+    <string name="ar_camera_permission">Camera permission is required for AR tracking.</string>
+    
+    <!-- Instructions Common -->
+    <string name="instr_start">Welcome to MineSafe AR. Tap floor to place doorway.</string>
+    <string name="instr_enter_mine">Physically walk toward the doorway to enter the mine.</string>
+    <string name="doorway_sign_title">MINE SAFE AR</string>
+    <string name="doorway_sign_sub">-- ENTER TO EXPLORE --</string>
+    
+    <!-- Module 1: Electrical Fire Instructions -->
+    <string name="instr_fire_detected">Electrical fire detected. Move toward the fire extinguisher.</string>
+    <string name="instr_go_to_extinguisher">Move toward the fire extinguisher (~10m ahead).</string>
+    <string name="instr_extinguisher_reached">Fire extinguisher reached. Open the extinguisher nozzle.</string>
+    <string name="instr_nozzle_reminder">Please open the extinguisher nozzle.</string>
+    <string name="instr_aim_at_fire">Aim the extinguisher toward the base of the fire.</string>
+    <string name="instr_discharge">Press to discharge the extinguisher.</string>
+    <string name="instr_fire_extinguished">Good job. The fire has been extinguished.</string>
+    <string name="btn_open_nozzle">OPEN NOZZLE</string>
+    <string name="btn_discharge">DISCHARGE EXTINGUISHER</string>
+    
+    <!-- Module 2: Chemical Hazard Instructions -->
+    <string name="instr_chem_detected">Chemical hazard detected. Do not approach the leak.</string>
+    <string name="instr_chem_proximity_warning">DANGER! Too close to chemical hazard. Maintain safe distance!</string>
+    <string name="instr_chem_move_away">Move away from the hazard zone.</string>
+    <string name="instr_chem_locate_equipment">Locate the emergency response equipment.</string>
+    <string name="instr_chem_follow_procedure">Do not touch the leaking container. Follow the emergency procedure.</string>
+    <string name="instr_chem_isolate_valve">Activate the emergency isolation valve to seal the line.</string>
+    <string name="instr_chem_controlled">Hazard controlled. Emergency isolation confirmed.</string>
+    <string name="btn_isolate_valve">ACTIVATE ISOLATION VALVE</string>
+    <string name="btn_emergency_vent">START VENTILATION PURGE</string>
+
+    <!-- Results Screen -->
+    <string name="training_complete">TRAINING COMPLETE</string>
+    <string name="assessment_report">OFFICIAL ASSESSMENT REPORT</string>
+    <string name="status_passed">TRAINING PASSED</string>
+    <string name="status_failed">REVIEW REQUIRED</string>
+    <string name="safety_score">Safety Score:</string>
+    <string name="response_time">Response Time:</string>
+    <string name="mistakes">Mistakes:</string>
+    <string name="steps_completed">Steps Completed:</string>
+    <string name="status_label">Status:</string>
+    
+    <!-- Help / Handbook -->
+    <string name="help_title">MINE SAFETY PROTOCOLS</string>
+    <string name="help_content">1. Always scan the surrounding rock roof and support sets before advancing.\n2. In electrical fires, locate Class C / dry chemical extinguishers; never use water on energized equipment.\n3. Aim nozzle at the base of flames using sweeping motions.\n4. When chemical or toxic gases breach, retreat upwind or maintain minimum 2-meter safety perimeter and engage emergency shutoff stations immediately.</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">SYSTEM SETTINGS</string>
+    <string name="sound_effects">Sound Effects</string>
+    <string name="voice_guidance">Voice Guidance (TTS)</string>
+    <string name="visual_indicators">AR Guidance Reticles</string>
+</resources>

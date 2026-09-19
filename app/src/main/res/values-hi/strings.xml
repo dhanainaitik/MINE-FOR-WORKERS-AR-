@@ -1,0 +1,89 @@
+<resources>
+    <string name="app_name">माइन सेफ एआर</string>
+    <string name="app_subtitle">कोयला खदान सुरक्षा प्रशिक्षण</string>
+    <string name="vocational_safety_training">व्यावसायिक सुरक्षा प्रशिक्षण</string>
+    
+    <!-- Modules -->
+    <string name="module_1_title">मॉड्यूल 01: विद्युत अग्नि सुरक्षा</string>
+    <string name="module_1_desc">सबस्टेशन विद्युत अग्नि खतरा, त्वरित गतिशीलता, अग्निशामक नोजल का उपयोग और आधार शमन।</string>
+    <string name="module_2_title">मॉड्यूल 02: रासायनिक खतरे की प्रतिक्रिया</string>
+    <string name="module_2_desc">संक्षारक वाष्प रिसाव, खतरे के क्षेत्र की रोकथाम और आपातकालीन पृथक्करण प्रक्रिया।</string>
+    
+    <!-- Navigation and General Actions -->
+    <string name="start_training">प्रशिक्षण शुरू करें</string>
+    <string name="select_module">मॉड्यूल चुनें</string>
+    <string name="settings">सेटिंग्स</string>
+    <string name="help">सहायता</string>
+    <string name="sound">ध्वनि</string>
+    <string name="sound_on">ध्वनि: चालू</string>
+    <string name="sound_off">ध्वनि: बंद</string>
+    <string name="language">भाषा</string>
+    <string name="english">English</string>
+    <string name="hindi">हिन्दी</string>
+    <string name="restart_training">पुनः प्रयास करें</string>
+    <string name="back_to_home">मॉड्यूल पर वापस जाएं</string>
+    <string name="close">बंद करें</string>
+    
+    <!-- AR Doorway & Placement HUD -->
+    <string name="score_label">स्कोर: %1$d/100</string>
+    <string name="time_label">समय: %1$d:%2$02d</string>
+    <string name="hud_title">माइन सेफ एआर</string>
+    <string name="hud_subtitle">कोयला खदान प्रशिक्षण</string>
+    <string name="scan_title">फर्श को स्कैन करें और प्रवेश द्वार रखें।</string>
+    <string name="scan_desc">एक सपाट सतह खोजें और खदान का प्रवेश द्वार स्थापित करें।</string>
+    <string name="tap_to_place_floor">रखने के लिए टैप करें</string>
+    <string name="tap_to_place_toast">प्रवेश द्वार स्थापित करने के लिए चिह्नित क्षेत्र पर टैप करें</string>
+    <string name="door_distance">प्रवेश द्वार: %1$.2f मी</string>
+    <string name="target_distance">लक्ष्य: %1$.1f मी</string>
+    <string name="ar_tracking_lost">ट्रैकिंग खो गई। फोन को फर्श पर धीरे-धीरे घुमाएं।</string>
+    <string name="ar_camera_permission">एआर ट्रैकिंग के लिए कैमरा अनुमति आवश्यक है।</string>
+    
+    <!-- Instructions Common -->
+    <string name="instr_start">माइन सेफ एआर में आपका स्वागत है। प्रवेश द्वार रखने के लिए फर्श पर टैप करें।</string>
+    <string name="instr_enter_mine">खदान में प्रवेश करने के लिए द्वार की ओर बढ़ें।</string>
+    <string name="doorway_sign_title">माइन सेफ एआर</string>
+    <string name="doorway_sign_sub">-- प्रवेश करें --</string>
+    
+    <!-- Module 1: Electrical Fire Instructions -->
+    <string name="instr_fire_detected">विद्युत आग का पता चला। अग्निशामक यंत्र की ओर बढ़ें।</string>
+    <string name="instr_go_to_extinguisher">अग्निशामक यंत्र की ओर बढ़ें (लगभग 10 मी आगे)।</string>
+    <string name="instr_extinguisher_reached">अग्निशामक यंत्र तक पहुँच गए। नोजल खोलें।</string>
+    <string name="instr_nozzle_reminder">कृपया अग्निशामक नोजल खोलें।</string>
+    <string name="instr_aim_at_fire">अग्निशामक यंत्र को आग के आधार पर केंद्रित करें।</string>
+    <string name="instr_discharge">अग्निशामक यंत्र डिस्चार्ज करने के लिए दबाएं।</string>
+    <string name="instr_fire_extinguished">बहुत अच्छा। आग बुझा दी गई है।</string>
+    <string name="btn_open_nozzle">नोजल खोलें</string>
+    <string name="btn_discharge">अग्निशामक डिस्चार्ज करें</string>
+    
+    <!-- Module 2: Chemical Hazard Instructions -->
+    <string name="instr_chem_detected">रासायनिक खतरे का पता चला। रिसाव के पास न जाएं।</string>
+    <string name="instr_chem_proximity_warning">सावधान! खतरे के बहुत करीब हैं। तुरंत पीछे हटें!</string>
+    <string name="instr_chem_move_away">खतरे के क्षेत्र से दूर हटें।</string>
+    <string name="instr_chem_locate_equipment">आपातकालीन उपकरण खोजें।</string>
+    <string name="instr_chem_follow_procedure">रिसाव वाले कंटेनर को न छुएं। आपातकालीन प्रक्रिया का पालन करें।</string>
+    <string name="instr_chem_isolate_valve">लाइन सील करने के लिए आपातकालीन आइसोलेशन वाल्व सक्रिय करें।</string>
+    <string name="instr_chem_controlled">खतरा नियंत्रित। आपातकालीन आइसोलेशन सफल।</string>
+    <string name="btn_isolate_valve">आइसोलेशन वाल्व सक्रिय करें</string>
+    <string name="btn_emergency_vent">वेंटिलेशन चालू करें</string>
+
+    <!-- Results Screen -->
+    <string name="training_complete">प्रशिक्षण पूर्ण</string>
+    <string name="assessment_report">आधिकारिक मूल्यांकन रिपोर्ट</string>
+    <string name="status_passed">प्रशिक्षण उत्तीर्ण</string>
+    <string name="status_failed">समीक्षा आवश्यक</string>
+    <string name="safety_score">सुरक्षा स्कोर:</string>
+    <string name="response_time">प्रतिक्रिया समय:</string>
+    <string name="mistakes">गलतियाँ:</string>
+    <string name="steps_completed">पूर्ण किए गए चरण:</string>
+    <string name="status_label">स्थिति:</string>
+    
+    <!-- Help / Handbook -->
+    <string name="help_title">खदान सुरक्षा नियम</string>
+    <string name="help_content">1. आगे बढ़ने से पहले हमेशा चट्टान की छत और लकड़ी के खंभों की जांच करें।\n2. बिजली की आग में कभी पानी का प्रयोग न करें; केवल सूखा रासायनिक अग्निशामक उपयोग करें।\n3. नोजल को आग की लपटों के आधार पर रखें।\n4. गैस रिसाव की स्थिति में न्यूनतम 2 मीटर सुरक्षित दूरी बनाए रखें और आपातकालीन वाल्व बंद करें।</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">प्रणाली सेटिंग्स</string>
+    <string name="sound_effects">ध्वनि प्रभाव</string>
+    <string name="voice_guidance">ध्वनि मार्गदर्शन (TTS)</string>
+    <string name="visual_indicators">एआर गाइड संकेत</string>
+</resources>
