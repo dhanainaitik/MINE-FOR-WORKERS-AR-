@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -30,10 +32,13 @@ import com.minesafe.ar.ar.DoorwayNode
 import com.minesafe.ar.ar.ElectricalBoxNode
 import com.minesafe.ar.ar.VideoFireNode
 import com.minesafe.ar.ar.EmergencyStationNode
+import com.minesafe.ar.ar.ExtinguisherHoldingState
 import com.minesafe.ar.ar.ExtinguisherNode
 import com.minesafe.ar.ar.FireNode
 import com.minesafe.ar.ar.MineEnvironmentNode
 import com.minesafe.ar.ar.PlacementReticleNode
+import com.minesafe.ar.gestures.HandGestureState
+import com.minesafe.ar.gestures.HandTrackingManager
 import com.minesafe.ar.audio.AudioManager
 import com.minesafe.ar.audio.VoiceInstructionManager
 import com.minesafe.ar.training.TrainingModule
@@ -131,6 +136,19 @@ fun MainApp(
     var isAimingAtFire by remember { mutableStateOf(false) }
     var dangerZoneWarningTriggered by remember { mutableStateOf(false) }
 
+    // MediaPipe Hand Gesture Tracking (Module 1: Electrical Fire Safety)
+    var handGestureState by remember { mutableStateOf(HandGestureState()) }
+    val handTrackingManager = remember(context) {
+        HandTrackingManager(context) { state ->
+            handGestureState = state
+        }
+    }
+    DisposableEffect(handTrackingManager) {
+        onDispose {
+            handTrackingManager.destroy()
+        }
+    }
+
     // Directional illumination down the mine drift
     val mainLight = rememberMainLightNode(engine) {
         color = Float4(1.0f, 0.95f, 0.85f, 1.0f)
@@ -149,6 +167,7 @@ fun MainApp(
     // Ensures Module 02 (Chemical Hazard) never retains, loads, or plays fire assets/effects
     LaunchedEffect(selectedModule) {
         if (selectedModule == TrainingModule.CHEMICAL_HAZARD) {
+            handTrackingManager.isEnabled = false
             videoFireNode?.let { node ->
                 node.stopFire()
                 node.isVisible = false
@@ -200,6 +219,7 @@ fun MainApp(
                 }
             }
         } else if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
+            handTrackingManager.isEnabled = true
             chemicalKitNode?.let { node ->
                 node.isVisible = false
                 virtualMineContainer?.removeChildNode(node)
@@ -531,16 +551,8 @@ fun MainApp(
                         }
                     }
 
-                    // Interactive touch actions on 3D equipment
+                    // Interactive touch actions on 3D equipment (Pickup is strictly gesture-driven via thumb-index pinch)
                     when (currentState) {
-                        TrainingState.EXTINGUISHER_REACHED -> {
-                            if (hitResult?.node == extinguisherNode?.safetyPin || hitResult?.node == extinguisherNode?.nozzle) {
-                                extinguisherNode?.removeSafetyPin()
-                                extinguisherNode?.openNozzle()
-                                viewModel.updateState(TrainingState.OPEN_NOZZLE)
-                                viewModel.updateState(TrainingState.AIM_AT_FIRE)
-                            }
-                        }
                         TrainingState.LOCATE_EMERGENCY_EQUIPMENT -> {
                             if (hitResult?.node == chemicalKitNode || hitResult?.node == chemicalKitNode?.modelNode || hitResult?.node == chemicalKitNode?.kitInteractiveTarget) {
                                 chemicalKitNode?.equipKit()
@@ -672,9 +684,17 @@ fun MainApp(
                     val workerVirtualZ = -virtualAdvance
                     val workerVirtualX = localCamX
 
-                    // --- MODULE 1: FIRE PROXIMITY HUD ---
+                    // --- MODULE 1: FIRE & EXTINGUISHER PROXIMITY & GESTURE INTERACTION ---
                     if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
-                        // Electrical box and fire are wall-mounted at virtual (1.95, 0.82, -10.20)
+                        handTrackingManager.processFrame(frame)
+
+                        val extVirtualZ = -6.50f
+                        val extVirtualX = -1.50f
+                        val distToExt = Math.hypot(
+                            (workerVirtualX - extVirtualX).toDouble(),
+                            (workerVirtualZ - extVirtualZ).toDouble()
+                        ).toFloat()
+
                         val fireVirtualZ = -10.20f
                         val fireVirtualX = 1.95f
                         val distToFire = Math.hypot(
@@ -682,12 +702,71 @@ fun MainApp(
                             (workerVirtualZ - fireVirtualZ).toDouble()
                         ).toFloat()
 
+                        val isExtHeld = extinguisherNode?.holdingState == ExtinguisherHoldingState.HELD
+
                         mainHandler.post {
-                            viewModel.updateDistanceToObjective(distToFire)
-                            isAimingAtFire = distToFire <= 4.5f
+                            viewModel.updateDistanceToObjective(if (!isExtHeld) distToExt else distToFire)
+                            isAimingAtFire = isExtHeld && (distToFire <= 4.5f)
                         }
 
-                        // Fire visual hazard: looping MP4 fire on electrical box
+                        // Transition: Approach extinguisher
+                        if (!isExtHeld && distToExt <= 2.2f && (currentState == TrainingState.FIRE_DETECTED || currentState == TrainingState.GO_TO_EXTINGUISHER)) {
+                            mainHandler.post {
+                                viewModel.updateState(TrainingState.EXTINGUISHER_REACHED)
+                            }
+                        }
+
+                        // Gesture 1: Pick Up Extinguisher with Pinch (debounced hold >= 80ms)
+                        if (!isExtHeld && distToExt <= 2.5f && (currentState == TrainingState.EXTINGUISHER_REACHED || currentState == TrainingState.FIRE_DETECTED)) {
+                            if (handGestureState.isPinchPickupTriggered()) {
+                                mainHandler.post {
+                                    extinguisherNode?.setHeld(true)
+                                    viewModel.updateState(TrainingState.OPEN_NOZZLE)
+                                    viewModel.updateState(TrainingState.AIM_AT_FIRE)
+                                    audioManager.playSuccessChime()
+                                    voiceManager.speak("Fire extinguisher acquired! Approach the electrical fire.")
+                                }
+                            }
+                        }
+
+                        // Extinguisher HELD position tracking:
+                        // While held, extinguisher smoothly moves with the worker in front of the camera,
+                        // responsive to physical walking amplification and hand position.
+                        if (isExtHeld) {
+                            val ext = extinguisherNode
+                            if (ext != null) {
+                                val targetX = workerVirtualX + 0.18f + (handGestureState.pinchCenterX - 0.5f) * 0.20f
+                                val targetY = 0.52f - (handGestureState.pinchCenterY - 0.5f) * 0.20f
+                                val targetZ = workerVirtualZ - 0.48f
+
+                                val curPos = ext.position
+                                ext.position = Float3(
+                                    curPos.x + (targetX - curPos.x) * 0.25f,
+                                    curPos.y + (targetY - curPos.y) * 0.25f,
+                                    curPos.z + (targetZ - curPos.z) * 0.25f
+                                )
+                            }
+
+                            // Gesture 2: Discharge Extinguisher with Pinch & Hold when near fire
+                            if (distToFire <= 4.2f && (currentState == TrainingState.AIM_AT_FIRE || currentState == TrainingState.OPEN_NOZZLE)) {
+                                if (handGestureState.isPinchHoldActive(600L)) {
+                                    mainHandler.post {
+                                        viewModel.updateState(TrainingState.DISCHARGE_EXTINGUISHER)
+                                        extinguisherNode?.setDischarging(true)
+                                        audioManager.playExtinguisherDischarge()
+                                        mainHandler.postDelayed({
+                                            videoFireNode?.stopFire()
+                                            viewModel.updateState(TrainingState.FIRE_EXTINGUISHED)
+                                            audioManager.playSuccessChime()
+                                            voiceManager.speak("Fire extinguished! Excellent job following emergency safety procedures.")
+                                            mainHandler.postDelayed({
+                                                viewModel.updateState(TrainingState.TRAINING_COMPLETE)
+                                            }, 2500)
+                                        }, 1500)
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // --- MODULE 2: CHEMICAL HAZARD DISTANCE & ISOLATION LOGIC ---
@@ -751,6 +830,63 @@ fun MainApp(
             }
         )
 
+        // Hand Landmarks Skeleton Debug Overlay (Visual verification for MediaPipe tracking)
+        if (selectedModule == TrainingModule.ELECTRICAL_FIRE && handGestureState.isHandPresent) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val canvasW = size.width
+                val canvasH = size.height
+                val pts = handGestureState.landmarks
+                if (pts.size >= 21) {
+                    // Finger and palm joint connections for full 21-landmark hand skeleton
+                    val connections = listOf(
+                        // Thumb
+                        0 to 1, 1 to 2, 2 to 3, 3 to 4,
+                        // Index
+                        0 to 5, 5 to 6, 6 to 7, 7 to 8,
+                        // Middle
+                        0 to 9, 9 to 10, 10 to 11, 11 to 12,
+                        // Ring
+                        0 to 13, 13 to 14, 14 to 15, 15 to 16,
+                        // Pinky
+                        0 to 17, 17 to 18, 18 to 19, 19 to 20,
+                        // Palm knuckles
+                        5 to 9, 9 to 13, 13 to 17
+                    )
+                    for ((start, end) in connections) {
+                        drawLine(
+                            color = Color(0xCC00E676),
+                            start = Offset(pts[start].x * canvasW, pts[start].y * canvasH),
+                            end = Offset(pts[end].x * canvasW, pts[end].y * canvasH),
+                            strokeWidth = 5f
+                        )
+                    }
+                    // Highlight pinch line between Thumb Tip (#4) and Index Tip (#8)
+                    if (handGestureState.isPinching) {
+                        drawLine(
+                            color = Color(0xFFFF1744),
+                            start = Offset(pts[4].x * canvasW, pts[4].y * canvasH),
+                            end = Offset(pts[8].x * canvasW, pts[8].y * canvasH),
+                            strokeWidth = 7f
+                        )
+                    }
+                    // Draw landmark nodes
+                    for (i in pts.indices) {
+                        val pt = pts[i]
+                        val (nodeColor, nodeRadius) = when (i) {
+                            4, 8 -> if (handGestureState.isPinching) Color(0xFFFF1744) to 12f else Color(0xFFFFD600) to 10f
+                            0 -> Color(0xFF2979FF) to 9f
+                            else -> Color(0xFF00E676) to 6f
+                        }
+                        drawCircle(
+                            color = nodeColor,
+                            radius = nodeRadius,
+                            center = Offset(pt.x * canvasW, pt.y * canvasH)
+                        )
+                    }
+                }
+            }
+        }
+
         // =========================================================================
         // COMPLETE INDUSTRIAL AR HUD OVERLAY
         // =========================================================================
@@ -812,7 +948,7 @@ fun MainApp(
                 }
             }
 
-            // --- AR STATUS PILL ---
+            // --- AR & GESTURE STATUS PILLS ---
             val debugBgColor = when {
                 doorwayAnchor != null -> Color(0xFF2E7D32)
                 debugPlacementStatus.startsWith("FLOOR DETECTED") -> Color(0xFF00C853)
@@ -820,21 +956,60 @@ fun MainApp(
                 else -> Color(0xFF0288D1)
             }
 
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = debugBgColor.copy(alpha = 0.92f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 70.dp)
+                    .padding(top = 70.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "● $debugPlacementStatus",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                )
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = debugBgColor.copy(alpha = 0.92f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        text = "● $debugPlacementStatus",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
+                }
+
+                if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    val (badgeBg, badgeBorder, badgeText) = when {
+                        handGestureState.isPinching -> Triple(
+                            Color(0xFFFF6D00).copy(alpha = 0.92f),
+                            Color(0xFFFFD54F),
+                            "🤏 PINCH DETECTED"
+                        )
+                        handGestureState.isHandPresent -> Triple(
+                            Color(0xFF00897B).copy(alpha = 0.90f),
+                            Color(0xFF80CBC4),
+                            "🖐️ HAND DETECTED"
+                        )
+                        else -> Triple(
+                            Color(0xFF37474F).copy(alpha = 0.75f),
+                            Color(0xFF78909C).copy(alpha = 0.40f),
+                            "○ NO HAND"
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = badgeBg,
+                        border = BorderStroke(1.dp, badgeBorder)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
             }
 
             // --- 2. INSTRUCTION CARD ---
@@ -858,8 +1033,8 @@ fun MainApp(
                 TrainingState.START, TrainingState.SCAN_FLOOR, TrainingState.PLACE_DOORWAY -> "Point camera at the floor until surface is detected, then tap."
                 TrainingState.ENTER_MINE -> if (doorDistance > 0) String.format(Locale.US, "Doorway: %.2f m ahead (Walk forward to enter)", doorDistance) else "Walk forward through doorway"
                 TrainingState.FIRE_DETECTED -> "Electrical fire ahead beside railway"
-                TrainingState.EXTINGUISHER_REACHED -> "Tap nozzle or pull safety pin"
-                TrainingState.OPEN_NOZZLE, TrainingState.AIM_AT_FIRE -> if (isAimingAtFire) "Aimed at base of fire. Ready to discharge." else "Aim camera directly at base of fire"
+                TrainingState.EXTINGUISHER_REACHED -> "Bring thumb & index finger together (pinch 🤏) to pick up extinguisher"
+                TrainingState.OPEN_NOZZLE, TrainingState.AIM_AT_FIRE -> if (isAimingAtFire) "Aimed at fire! Pinch & hold (🤏) to discharge." else "Approach fire and aim at base"
                 TrainingState.DISCHARGE_EXTINGUISHER -> "Discharging suppression agent"
                 TrainingState.CHEMICAL_HAZARD_DETECTED -> "Stay at least 2.0m away from toxic vapor"
                 TrainingState.LEAVE_HAZARD_ZONE -> "Retreat to clear vantage point"
@@ -971,22 +1146,6 @@ fun MainApp(
                     .padding(bottom = 80.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (currentState == TrainingState.EXTINGUISHER_REACHED) {
-                    Button(
-                        onClick = {
-                            extinguisherNode?.removeSafetyPin()
-                            extinguisherNode?.openNozzle()
-                            viewModel.updateState(TrainingState.OPEN_NOZZLE)
-                            viewModel.updateState(TrainingState.AIM_AT_FIRE)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD54F), contentColor = Color.Black),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(50.dp)
-                    ) {
-                        Text(stringResource(R.string.btn_open_nozzle), fontWeight = FontWeight.Bold)
-                    }
-                }
-
                 if (currentState == TrainingState.AIM_AT_FIRE || currentState == TrainingState.OPEN_NOZZLE) {
                     Button(
                         onClick = {
