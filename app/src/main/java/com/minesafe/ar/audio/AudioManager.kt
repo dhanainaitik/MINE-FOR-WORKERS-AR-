@@ -255,6 +255,47 @@ class AudioManager(private val context: Context) {
         }
     }
 
+    /**
+     * Metallic pin pull sound: high-frequency metallic slide + chime (1400Hz - 1760Hz).
+     */
+    fun playPinPullSound() {
+        if (isMuted) return
+        scope.launch {
+            val sampleRate = 22050
+            val len = (sampleRate * 0.22f).toInt()
+            val buffer = ShortArray(len)
+            for (i in 0 until len) {
+                val t = i.toFloat() / sampleRate
+                val env = (1.0f - (i.toFloat() / len)).coerceAtLeast(0f)
+                val freq = 1350.0 + (i.toFloat() / len) * 450.0
+                val tone1 = sin(2.0 * PI * freq * t).toFloat()
+                val tone2 = sin(2.0 * PI * (freq * 1.5) * t).toFloat() * 0.4f
+                val noise = (Random.nextFloat() * 2f - 1f) * (1f - (i.toFloat() / len).coerceIn(0f, 1f)) * 0.25f
+                buffer[i] = ((tone1 + tone2 + noise) * env * 22000f).toInt().coerceIn(-32767, 32767).toShort()
+            }
+            playBuffer(buffer, sampleRate)
+        }
+    }
+
+    /**
+     * Mechanical lever trigger squeeze: solid mechanical latch / click snap.
+     */
+    fun playLeverSqueezeSound() {
+        if (isMuted) return
+        scope.launch {
+            val sampleRate = 22050
+            val len = (sampleRate * 0.12f).toInt()
+            val buffer = ShortArray(len)
+            for (i in 0 until len) {
+                val t = i.toFloat() / sampleRate
+                val env = (1.0f - (i.toFloat() / len)).coerceAtLeast(0f)
+                val click = sin(2.0 * PI * 520.0 * t).toFloat() + (Random.nextFloat() * 2f - 1f) * 0.35f
+                buffer[i] = (click * env * 24000f).toInt().coerceIn(-32767, 32767).toShort()
+            }
+            playBuffer(buffer, sampleRate)
+        }
+    }
+
     private fun playBuffer(buffer: ShortArray, sampleRate: Int) {
         try {
             val track = AudioTrack.Builder()

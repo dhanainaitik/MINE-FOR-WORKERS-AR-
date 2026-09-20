@@ -11,10 +11,15 @@ enum class TrainingState {
     PLACE_DOORWAY,
     ENTER_MINE,
 
-    // Module 1: Electrical Fire Safety
+    // Module 1: Electrical Fire Safety (Sequential PASS Protocol)
     FIRE_DETECTED,
     GO_TO_EXTINGUISHER,
     EXTINGUISHER_REACHED,
+    EXTINGUISHER_HELD,
+    PULL_SAFETY_PIN,
+    AIM_AT_FIRE_BASE,
+    SQUEEZE_LEVER,
+    SWEEP_SIDE_TO_SIDE,
     OPEN_NOZZLE,
     AIM_AT_FIRE,
     DISCHARGE_EXTINGUISHER,

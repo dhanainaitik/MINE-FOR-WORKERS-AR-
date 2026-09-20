@@ -44,14 +44,20 @@
     <string name="doorway_sign_title">MINE SAFE AR</string>
     <string name="doorway_sign_sub">-- ENTER TO EXPLORE --</string>
     
-    <!-- Module 1: Electrical Fire Instructions -->
+    <!-- Module 1: Electrical Fire Instructions (Sequential PASS) -->
     <string name="instr_fire_detected">Electrical fire detected. Move toward the fire extinguisher.</string>
     <string name="instr_go_to_extinguisher">Move toward the fire extinguisher (~10m ahead).</string>
-    <string name="instr_extinguisher_reached">Fire extinguisher reached. Open the extinguisher nozzle.</string>
-    <string name="instr_nozzle_reminder">Please open the extinguisher nozzle.</string>
-    <string name="instr_aim_at_fire">Aim the extinguisher toward the base of the fire.</string>
-    <string name="instr_discharge">Press to discharge the extinguisher.</string>
-    <string name="instr_fire_extinguished">Good job. The fire has been extinguished.</string>
+    <string name="instr_extinguisher_reached">Fire extinguisher reached. Pinch thumb and index to pick up.</string>
+    <string name="instr_extinguisher_held">Extinguisher acquired! Approach the electrical fire.</string>
+    <string name="instr_pull_pin">PULL SAFETY PIN: Pull the safety pin to unlock extinguisher.</string>
+    <string name="instr_aim_fire_base">AIM AT BASE OF FIRE: Aim nozzle at the base of the flames.</string>
+    <string name="instr_squeeze_lever">SQUEEZE THE LEVER: Squeeze your hand to depress the lever.</string>
+    <string name="instr_sweep_side_to_side">SWEEP SIDE TO SIDE: Sweep nozzle from side to side across flames.</string>
+    <string name="instr_aim_at_fire">Aim the extinguisher nozzle at the base of the fire.</string>
+    <string name="instr_nozzle_reminder">Please aim the extinguisher nozzle at the fire.</string>
+    <string name="instr_discharge">Discharge extinguisher at the base of the fire.</string>
+    <string name="instr_fire_extinguished">Good job! The fire has been completely extinguished.</string>
+    <string name="btn_squeeze_lever">SQUEEZE LEVER</string>
     <string name="btn_open_nozzle">OPEN NOZZLE</string>
     <string name="btn_discharge">DISCHARGE EXTINGUISHER</string>
     

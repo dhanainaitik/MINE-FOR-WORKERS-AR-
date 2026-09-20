@@ -2,6 +2,7 @@ package com.minesafe.ar.ui
 
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.MotionEvent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -135,6 +136,15 @@ fun MainApp(
 
     var isAimingAtFire by remember { mutableStateOf(false) }
     var dangerZoneWarningTriggered by remember { mutableStateOf(false) }
+    val sweepProgress by viewModel.sweepProgress.collectAsState()
+    var aimAlignedDurationMs by remember { mutableLongStateOf(0L) }
+    var accumulatedSweepAngle by remember { mutableFloatStateOf(0f) }
+    var lastHorizontalAimAngle by remember { mutableFloatStateOf(0f) }
+    var lastWarningVoiceTimeMs by remember { mutableLongStateOf(0L) }
+    var isAimAlignedWithFireBase by remember { mutableStateOf(false) }
+    var stableHandX by remember { mutableFloatStateOf(0.5f) }
+    var stableHandY by remember { mutableFloatStateOf(0.5f) }
+    var stableYaw by remember { mutableFloatStateOf(0f) }
 
     // MediaPipe Hand Gesture Tracking (Module 1: Electrical Fire Safety)
     var handGestureState by remember { mutableStateOf(HandGestureState()) }
@@ -264,7 +274,10 @@ fun MainApp(
                 if (extinguisherNode == null) {
                     val ext = ExtinguisherNode(
                         engine = engine,
-                        modelLoader = modelLoader
+                        modelLoader = modelLoader,
+                        brassMaterial = brassMat,
+                        leverMaterial = extRedMat,
+                        sprayMaterial = sprayMat
                     ).apply {
                         position = Float3(-1.50f, 0.00f, -6.50f)
                     }
@@ -331,32 +344,40 @@ fun MainApp(
             TrainingState.ENTER_MINE -> {
                 voiceManager.speak("Physically walk toward the doorway to enter the mine.")
             }
-            // Module 1: Electrical Fire
+            // Module 1: Electrical Fire (Sequential PASS Voice Guidance)
             TrainingState.FIRE_DETECTED -> {
                 videoFireNode?.startFire()
                 audioManager.startMineAmbiance()
                 audioManager.startFireSound()
-                voiceManager.speak("Warning. Electrical fire detected.")
+                voiceManager.speak("Warning. Electrical fire detected ahead. Move toward the fire extinguisher.")
             }
             TrainingState.EXTINGUISHER_REACHED -> {
                 audioManager.playSuccessChime()
-                voiceManager.speak("Good. Pick up the extinguisher and prepare to operate it.")
+                voiceManager.speak("Pinch your thumb and index finger to pick up the fire extinguisher.")
             }
-            TrainingState.OPEN_NOZZLE -> {
-                audioManager.playTap()
-                voiceManager.speak("Aim the extinguisher toward the base of the fire.")
+            TrainingState.EXTINGUISHER_HELD -> {
+                audioManager.playSuccessChime()
+                voiceManager.speak("Extinguisher acquired! Approach the electrical fire.")
             }
-            TrainingState.AIM_AT_FIRE -> {
-                voiceManager.speak("Discharge the extinguisher.")
+            TrainingState.PULL_SAFETY_PIN -> {
+                voiceManager.speak("Pull the safety pin.")
             }
-            TrainingState.DISCHARGE_EXTINGUISHER -> {
-                audioManager.playExtinguisherDischarge()
+            TrainingState.AIM_AT_FIRE_BASE, TrainingState.AIM_AT_FIRE, TrainingState.OPEN_NOZZLE -> {
+                audioManager.playSuccessChime()
+                voiceManager.speak("Aim the nozzle at the base of the fire.")
+            }
+            TrainingState.SQUEEZE_LEVER -> {
+                audioManager.playSuccessChime()
+                voiceManager.speak("Now squeeze the lever.")
+            }
+            TrainingState.SWEEP_SIDE_TO_SIDE -> {
+                voiceManager.speak("Sweep the nozzle from side to side across the base of the fire.")
             }
             TrainingState.FIRE_EXTINGUISHED -> {
                 videoFireNode?.stopFire()
                 audioManager.stopHazardSound()
                 audioManager.playSuccessChime()
-                voiceManager.speak("Training complete. The fire has been extinguished.")
+                voiceManager.speak("Fire extinguished. Good job following safety procedures.")
                 delay(3000)
                 onTrainingComplete()
             }
@@ -506,7 +527,10 @@ fun MainApp(
                                         // 3. Fire Extinguisher: Standing upright on mine floor on the LEFT side of the walking path before the fire
                                         val ext = ExtinguisherNode(
                                             engine = engine,
-                                            modelLoader = modelLoader
+                                            modelLoader = modelLoader,
+                                            brassMaterial = brassMat,
+                                            leverMaterial = extRedMat,
+                                            sprayMaterial = sprayMat
                                         ).apply {
                                             position = Float3(-1.50f, 0.00f, -6.50f)
                                         }
@@ -716,28 +740,58 @@ fun MainApp(
                             }
                         }
 
-                        // Gesture 1: Pick Up Extinguisher with Pinch (debounced hold >= 80ms)
+                        // Calculate camera forward heading in mine space
+                        val forwardX = -cameraPose.zAxis[0]
+                        val forwardY = -cameraPose.zAxis[1]
+                        val forwardZ = -cameraPose.zAxis[2]
+                        val cosT = Math.cos(anchorYawRad.toDouble()).toFloat()
+                        val sinT = Math.sin(anchorYawRad.toDouble()).toFloat()
+                        val localFwdX = cosT * forwardX - sinT * forwardZ
+                        val localFwdY = forwardY
+                        val localFwdZ = sinT * forwardX + cosT * forwardZ
+
+                        // Horizontal unit forward vector
+                        val fwdLen = Math.hypot(localFwdX.toDouble(), localFwdZ.toDouble()).toFloat().coerceAtLeast(0.001f)
+                        val uFwdX = localFwdX / fwdLen
+                        val uFwdZ = localFwdZ / fwdLen
+
+                        // Horizontal unit right vector: (uFwdZ, 0, -uFwdX)
+                        val uRightX = uFwdZ
+                        val uRightZ = -uFwdX
+
+                        // Smooth hand tracking with low-pass filter (eliminates frame-dropping snap)
+                        if (handGestureState.isHandPresent) {
+                            stableHandX += (handGestureState.pinchCenterX - stableHandX) * 0.25f
+                            stableHandY += (handGestureState.pinchCenterY - stableHandY) * 0.25f
+                        } else {
+                            stableHandX += (0.5f - stableHandX) * 0.03f
+                            stableHandY += (0.5f - stableHandY) * 0.03f
+                        }
+
+                        // Interaction 0: Pick Up Extinguisher with Pinch (debounced hold >= 80ms)
                         if (!isExtHeld && distToExt <= 2.5f && (currentState == TrainingState.EXTINGUISHER_REACHED || currentState == TrainingState.FIRE_DETECTED)) {
                             if (handGestureState.isPinchPickupTriggered()) {
+                                val targetYawDeg = Math.toDegrees(Math.atan2((-uFwdX).toDouble(), (-uFwdZ).toDouble())).toFloat()
+                                stableYaw = targetYawDeg
                                 mainHandler.post {
                                     extinguisherNode?.setHeld(true)
-                                    viewModel.updateState(TrainingState.OPEN_NOZZLE)
-                                    viewModel.updateState(TrainingState.AIM_AT_FIRE)
+                                    viewModel.updateState(TrainingState.EXTINGUISHER_HELD)
                                     audioManager.playSuccessChime()
-                                    voiceManager.speak("Fire extinguisher acquired! Approach the electrical fire.")
                                 }
                             }
                         }
 
                         // Extinguisher HELD position tracking:
-                        // While held, extinguisher smoothly moves with the worker in front of the camera,
-                        // responsive to physical walking amplification and hand position.
+                        // Positioned stably in front of worker, moving smoothly with camera and filtered hand
                         if (isExtHeld) {
                             val ext = extinguisherNode
                             if (ext != null) {
-                                val targetX = workerVirtualX + 0.18f + (handGestureState.pinchCenterX - 0.5f) * 0.20f
-                                val targetY = 0.52f - (handGestureState.pinchCenterY - 0.5f) * 0.20f
-                                val targetZ = workerVirtualZ - 0.48f
+                                val handOffsetX = (stableHandX - 0.5f) * 0.22f
+                                val handOffsetY = -(stableHandY - 0.5f) * 0.18f
+
+                                val targetX = workerVirtualX + (uFwdX * 0.52f) + (uRightX * (0.16f + handOffsetX))
+                                val targetY = 0.48f + handOffsetY
+                                val targetZ = workerVirtualZ + (uFwdZ * 0.52f) + (uRightZ * (0.16f + handOffsetX))
 
                                 val curPos = ext.position
                                 ext.position = Float3(
@@ -745,24 +799,136 @@ fun MainApp(
                                     curPos.y + (targetY - curPos.y) * 0.25f,
                                     curPos.z + (targetZ - curPos.z) * 0.25f
                                 )
+
+                                val targetYawDeg = Math.toDegrees(Math.atan2((-uFwdX).toDouble(), (-uFwdZ).toDouble())).toFloat()
+                                var deltaYaw = (targetYawDeg - stableYaw) % 360f
+                                if (deltaYaw > 180f) deltaYaw -= 360f
+                                if (deltaYaw < -180f) deltaYaw += 360f
+                                stableYaw += deltaYaw * 0.20f
+                                ext.rotation = Float3(0f, stableYaw, 0f)
                             }
 
-                            // Gesture 2: Discharge Extinguisher with Pinch & Hold when near fire
-                            if (distToFire <= 4.2f && (currentState == TrainingState.AIM_AT_FIRE || currentState == TrainingState.OPEN_NOZZLE)) {
-                                if (handGestureState.isPinchHoldActive(600L)) {
+                            // Advance to Step 1 (PULL_SAFETY_PIN) when worker approaches the fire with extinguisher
+                            if (distToFire <= 4.5f && currentState == TrainingState.EXTINGUISHER_HELD) {
+                                mainHandler.post {
+                                    viewModel.updateState(TrainingState.PULL_SAFETY_PIN)
+                                }
+                            }
+
+                            // Compute nozzle / camera aim angle relative to fire base (1.80f, 0.40f, -10.05f)
+                            val toFireX = 1.80f - workerVirtualX
+                            val toFireY = 0.40f - 1.25f
+                            val toFireZ = -10.05f - workerVirtualZ
+                            val toFireLen = Math.sqrt((toFireX * toFireX + toFireY * toFireY + toFireZ * toFireZ).toDouble()).toFloat()
+                            val nFireX = toFireX / toFireLen.coerceAtLeast(0.01f)
+                            val nFireY = toFireY / toFireLen.coerceAtLeast(0.01f)
+                            val nFireZ = toFireZ / toFireLen.coerceAtLeast(0.01f)
+
+                            val dotAim = (localFwdX * nFireX + localFwdY * nFireY + localFwdZ * nFireZ).coerceIn(-1f, 1f)
+                            val aimAngleDeg = Math.toDegrees(Math.acos(dotAim.toDouble())).toFloat()
+                            val isAimed = aimAngleDeg <= 32.0f
+
+                            mainHandler.post {
+                                isAimAlignedWithFireBase = isAimed
+                            }
+
+                            val isSqueezing = handGestureState.isLeverSqueezeActive()
+                            val isPinOut = ext?.isPinRemoved == true
+                            val now = SystemClock.uptimeMillis()
+
+                            // Update 3D lever visual depression based on squeeze gesture
+                            ext?.setLeverSqueezed(isSqueezing && isPinOut)
+
+                            // --- STEP 1: PULL SAFETY PIN ---
+                            if (currentState == TrainingState.PULL_SAFETY_PIN) {
+                                if (handGestureState.isPinPullTriggered()) {
                                     mainHandler.post {
-                                        viewModel.updateState(TrainingState.DISCHARGE_EXTINGUISHER)
-                                        extinguisherNode?.setDischarging(true)
-                                        audioManager.playExtinguisherDischarge()
-                                        mainHandler.postDelayed({
-                                            videoFireNode?.stopFire()
-                                            viewModel.updateState(TrainingState.FIRE_EXTINGUISHED)
+                                        ext?.triggerPinRemoval()
+                                        audioManager.playPinPullSound()
+                                        viewModel.updateState(TrainingState.AIM_AT_FIRE_BASE)
+                                        voiceManager.speak("Safety pin removed! Now aim the nozzle at the base of the fire.")
+                                    }
+                                } else if (isSqueezing && now - lastWarningVoiceTimeMs > 3500L) {
+                                    // Squeeze locked before pin removal
+                                    lastWarningVoiceTimeMs = now
+                                    mainHandler.post {
+                                        audioManager.playMistakeBuzzer()
+                                        viewModel.registerMistake(2)
+                                        voiceManager.speak("Pull the safety pin first.")
+                                    }
+                                }
+                            }
+
+                            // --- STEP 2: AIM AT BASE OF FIRE ---
+                            if (currentState == TrainingState.AIM_AT_FIRE_BASE || currentState == TrainingState.AIM_AT_FIRE || currentState == TrainingState.OPEN_NOZZLE) {
+                                if (isAimed) {
+                                    aimAlignedDurationMs += 40L
+                                    if (aimAlignedDurationMs >= 500L) {
+                                        mainHandler.post {
                                             audioManager.playSuccessChime()
-                                            voiceManager.speak("Fire extinguished! Excellent job following emergency safety procedures.")
-                                            mainHandler.postDelayed({
-                                                viewModel.updateState(TrainingState.TRAINING_COMPLETE)
-                                            }, 2500)
-                                        }, 1500)
+                                            viewModel.updateState(TrainingState.SQUEEZE_LEVER)
+                                            voiceManager.speak("Aim correct! Now squeeze the lever.")
+                                        }
+                                    }
+                                } else {
+                                    aimAlignedDurationMs = 0L
+                                    if (isSqueezing && now - lastWarningVoiceTimeMs > 3500L) {
+                                        // Squeeze locked before correct aiming
+                                        lastWarningVoiceTimeMs = now
+                                        mainHandler.post {
+                                            audioManager.playMistakeBuzzer()
+                                            viewModel.registerMistake(2)
+                                            voiceManager.speak("Aim the nozzle at the base of the fire first.")
+                                        }
+                                    }
+                                }
+                            }
+
+                            // --- STEP 3: SQUEEZE THE LEVER ---
+                            if (currentState == TrainingState.SQUEEZE_LEVER) {
+                                if (isSqueezing) {
+                                    mainHandler.post {
+                                        ext?.setDischarging(true)
+                                        audioManager.playLeverSqueezeSound()
+                                        audioManager.playExtinguisherDischarge(5000)
+                                        viewModel.updateState(TrainingState.SWEEP_SIDE_TO_SIDE)
+                                        voiceManager.speak("Keep squeezing and sweep the nozzle from side to side.")
+                                    }
+                                }
+                            }
+
+                            // --- STEP 4: SWEEP SIDE TO SIDE ---
+                            if (currentState == TrainingState.SWEEP_SIDE_TO_SIDE) {
+                                ext?.setDischarging(isSqueezing)
+                                val horizontalAimAngle = Math.atan2(localFwdX.toDouble(), -localFwdZ.toDouble()).toFloat()
+                                val deltaAngle = Math.abs(horizontalAimAngle - lastHorizontalAimAngle)
+                                lastHorizontalAimAngle = horizontalAimAngle
+
+                                if (isSqueezing) {
+                                    if (isAimed && deltaAngle in 0.003f..0.25f) {
+                                        accumulatedSweepAngle += deltaAngle
+                                        val prog = (accumulatedSweepAngle / 0.50f).coerceIn(0f, 1f)
+                                        mainHandler.post {
+                                            viewModel.updateSweepProgress(prog)
+                                        }
+                                        if (prog >= 1.0f) {
+                                            mainHandler.post {
+                                                ext?.setDischarging(false)
+                                                videoFireNode?.stopFire()
+                                                audioManager.stopHazardSound()
+                                                audioManager.playSuccessChime()
+                                                viewModel.updateState(TrainingState.FIRE_EXTINGUISHED)
+                                                voiceManager.speak("Fire extinguished! Excellent job following safety procedures.")
+                                                mainHandler.postDelayed({
+                                                    viewModel.updateState(TrainingState.TRAINING_COMPLETE)
+                                                }, 2500)
+                                            }
+                                        }
+                                    }
+                                } else if (now - lastWarningVoiceTimeMs > 4000L) {
+                                    lastWarningVoiceTimeMs = now
+                                    mainHandler.post {
+                                        voiceManager.speak("Keep the lever squeezed while sweeping.")
                                     }
                                 }
                             }
@@ -980,6 +1146,11 @@ fun MainApp(
                 if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
                     Spacer(modifier = Modifier.width(8.dp))
                     val (badgeBg, badgeBorder, badgeText) = when {
+                        handGestureState.isLeverSqueezeActive() -> Triple(
+                            Color(0xFFD50000).copy(alpha = 0.92f),
+                            Color(0xFFFF8A80),
+                            "✊ SQUEEZE DETECTED"
+                        )
                         handGestureState.isPinching -> Triple(
                             Color(0xFFFF6D00).copy(alpha = 0.92f),
                             Color(0xFFFFD54F),
@@ -1009,6 +1180,45 @@ fun MainApp(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
+
+                    // PASS Procedure Status Badge
+                    val isExtHeld = extinguisherNode?.holdingState == ExtinguisherHoldingState.HELD ||
+                            currentState in listOf(
+                                TrainingState.EXTINGUISHER_HELD,
+                                TrainingState.PULL_SAFETY_PIN,
+                                TrainingState.AIM_AT_FIRE_BASE,
+                                TrainingState.AIM_AT_FIRE,
+                                TrainingState.OPEN_NOZZLE,
+                                TrainingState.SQUEEZE_LEVER,
+                                TrainingState.SWEEP_SIDE_TO_SIDE,
+                                TrainingState.DISCHARGE_EXTINGUISHER
+                            )
+                    if (isExtHeld) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        val (procBg, procText) = when (currentState) {
+                            TrainingState.PULL_SAFETY_PIN -> Color(0xFFE65100) to "🔒 PIN: LOCKED"
+                            TrainingState.AIM_AT_FIRE_BASE, TrainingState.AIM_AT_FIRE, TrainingState.OPEN_NOZZLE ->
+                                if (isAimAlignedWithFireBase) Color(0xFF2E7D32) to "🎯 AIM: ALIGNED" else Color(0xFFC62828) to "🎯 AIM: POINT AT BASE"
+                            TrainingState.SQUEEZE_LEVER ->
+                                if (handGestureState.isLeverSqueezeActive()) Color(0xFF00C853) to "⚡ LEVER: SQUEEZED" else Color(0xFFF57F17) to "⚡ SQUEEZE LEVER"
+                            TrainingState.SWEEP_SIDE_TO_SIDE ->
+                                Color(0xFF00838F) to "↔ SWEEP: ${(sweepProgress * 100).toInt()}%"
+                            else -> Color(0xFF2E7D32) to "🧯 READY"
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = procBg.copy(alpha = 0.92f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = procText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1018,7 +1228,11 @@ fun MainApp(
                 TrainingState.ENTER_MINE -> stringResource(R.string.instr_enter_mine)
                 TrainingState.FIRE_DETECTED, TrainingState.GO_TO_EXTINGUISHER -> stringResource(R.string.instr_fire_detected)
                 TrainingState.EXTINGUISHER_REACHED -> stringResource(R.string.instr_extinguisher_reached)
-                TrainingState.OPEN_NOZZLE, TrainingState.AIM_AT_FIRE -> stringResource(R.string.instr_aim_at_fire)
+                TrainingState.EXTINGUISHER_HELD -> stringResource(R.string.instr_extinguisher_held)
+                TrainingState.PULL_SAFETY_PIN -> "STEP 1: PULL SAFETY PIN"
+                TrainingState.AIM_AT_FIRE_BASE, TrainingState.AIM_AT_FIRE, TrainingState.OPEN_NOZZLE -> "STEP 2: AIM AT BASE OF FIRE"
+                TrainingState.SQUEEZE_LEVER -> "STEP 3: SQUEEZE THE LEVER"
+                TrainingState.SWEEP_SIDE_TO_SIDE -> "STEP 4: SWEEP SIDE TO SIDE"
                 TrainingState.DISCHARGE_EXTINGUISHER -> stringResource(R.string.instr_discharge)
                 TrainingState.FIRE_EXTINGUISHED -> stringResource(R.string.instr_fire_extinguished)
                 TrainingState.CHEMICAL_HAZARD_DETECTED -> stringResource(R.string.instr_chem_detected)
@@ -1034,7 +1248,11 @@ fun MainApp(
                 TrainingState.ENTER_MINE -> if (doorDistance > 0) String.format(Locale.US, "Doorway: %.2f m ahead (Walk forward to enter)", doorDistance) else "Walk forward through doorway"
                 TrainingState.FIRE_DETECTED -> "Electrical fire ahead beside railway"
                 TrainingState.EXTINGUISHER_REACHED -> "Bring thumb & index finger together (pinch 🤏) to pick up extinguisher"
-                TrainingState.OPEN_NOZZLE, TrainingState.AIM_AT_FIRE -> if (isAimingAtFire) "Aimed at fire! Pinch & hold (🤏) to discharge." else "Approach fire and aim at base"
+                TrainingState.EXTINGUISHER_HELD -> "Approach the electrical fire (~4m ahead)"
+                TrainingState.PULL_SAFETY_PIN -> "Pinch (🤏) the safety pin ring to remove it"
+                TrainingState.AIM_AT_FIRE_BASE, TrainingState.AIM_AT_FIRE, TrainingState.OPEN_NOZZLE -> if (isAimAlignedWithFireBase) "Aim locked! Hold steady." else "Point nozzle down at base of fire flames"
+                TrainingState.SQUEEZE_LEVER -> "Squeeze hand (✊) to depress lever and discharge"
+                TrainingState.SWEEP_SIDE_TO_SIDE -> "Keep lever squeezed! Sweep nozzle left-to-right across flames (${(sweepProgress * 100).toInt()}%)"
                 TrainingState.DISCHARGE_EXTINGUISHER -> "Discharging suppression agent"
                 TrainingState.CHEMICAL_HAZARD_DETECTED -> "Stay at least 2.0m away from toxic vapor"
                 TrainingState.LEAVE_HAZARD_ZONE -> "Retreat to clear vantage point"
@@ -1146,28 +1364,85 @@ fun MainApp(
                     .padding(bottom = 80.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (currentState == TrainingState.AIM_AT_FIRE || currentState == TrainingState.OPEN_NOZZLE) {
+                if (currentState == TrainingState.PULL_SAFETY_PIN) {
                     Button(
                         onClick = {
-                            if (isAimingAtFire) {
-                                viewModel.updateState(TrainingState.DISCHARGE_EXTINGUISHER)
-                                extinguisherNode?.setDischarging(true)
-                                videoFireNode?.stopFire()
-                                viewModel.updateState(TrainingState.FIRE_EXTINGUISHED)
-                            } else {
-                                viewModel.registerMistake(5)
-                                audioManager.playMistakeBuzzer()
-                                voiceManager.speak("Aim directly at the base of the fire before discharging.")
-                            }
+                            extinguisherNode?.triggerPinRemoval()
+                            audioManager.playPinPullSound()
+                            viewModel.updateState(TrainingState.AIM_AT_FIRE_BASE)
+                            voiceManager.speak("Safety pin removed! Now aim the nozzle at the base of the fire.")
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isAimingAtFire) Color(0xFFFF3D00) else Color(0xFF455A64),
-                            contentColor = Color.White
-                        ),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD54F), contentColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(50.dp)
+                    ) {
+                        Text("PULL SAFETY PIN (🤏)", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (currentState == TrainingState.AIM_AT_FIRE_BASE) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isAimAlignedWithFireBase) Color(0xFF2E7D32).copy(alpha = 0.90f) else Color(0xFF37474F).copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, if (isAimAlignedWithFireBase) Color(0xFF00E676) else Color.White.copy(alpha = 0.3f)),
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isAimAlignedWithFireBase) "🎯 AIM ALIGNED WITH FIRE BASE" else "🎯 POINT NOZZLE AT BASE OF FLAMES",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                if (currentState == TrainingState.SQUEEZE_LEVER) {
+                    Button(
+                        onClick = {
+                            extinguisherNode?.setLeverSqueezed(true)
+                            extinguisherNode?.setDischarging(true)
+                            audioManager.playLeverSqueezeSound()
+                            audioManager.playExtinguisherDischarge(5000)
+                            viewModel.updateState(TrainingState.SWEEP_SIDE_TO_SIDE)
+                            voiceManager.speak("Keep squeezing and sweep side to side.")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3D00), contentColor = Color.White),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(52.dp)
                     ) {
-                        Text(stringResource(R.string.btn_discharge), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.btn_squeeze_lever), fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (currentState == TrainingState.SWEEP_SIDE_TO_SIDE) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color.Black.copy(alpha = 0.85f),
+                        border = BorderStroke(1.dp, Color(0xFF00E676)),
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "SWEEPING ACROSS FLAMES: ${(sweepProgress * 100).toInt()}%",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { sweepProgress },
+                                modifier = Modifier.width(220.dp).height(8.dp),
+                                color = Color(0xFF00E676),
+                                trackColor = Color.DarkGray
+                            )
+                        }
                     }
                 }
 

@@ -26,6 +26,8 @@ data class HandGestureState(
     val wristX: Float = 0.5f,
     val wristY: Float = 0.5f,
     val landmarks: List<HandLandmarkPoint> = emptyList(),
+    val isSqueezing: Boolean = false,
+    val gripRatio: Float = 1.0f,
     val diagnosticStatus: String = "NO HAND DETECTED",
     val frameCount: Long = 0L
 ) {
@@ -34,6 +36,20 @@ data class HandGestureState(
      */
     fun isPinchPickupTriggered(): Boolean {
         return isPinching && (pinchHoldDurationMs >= 80L || consecutivePinchFrames >= 2)
+    }
+
+    /**
+     * Checks if a deliberate pin-pull gesture is triggered (held pinch >= 200ms or 3 frames).
+     */
+    fun isPinPullTriggered(): Boolean {
+        return isPinching && (pinchHoldDurationMs >= 200L || consecutivePinchFrames >= 3)
+    }
+
+    /**
+     * Checks if a lever squeeze gesture is active (either full hand grip or deliberate lever compression).
+     */
+    fun isLeverSqueezeActive(): Boolean {
+        return isSqueezing || (isPinching && (pinchHoldDurationMs >= 250L || consecutivePinchFrames >= 4))
     }
 
     /**
@@ -48,6 +64,7 @@ data class HandGestureState(
  * Module 01: Hand Gesture Detector
  * - Tracks 21 MediaPipe hand landmarks (wrist, thumb tip #4, index finger tip #8, etc.)
  * - Computes normalized Euclidean pinch distance between Thumb Tip and Index Finger Tip
+ * - Computes multi-finger grip compression for extinguisher lever squeezing
  * - Implements hysteresis thresholds to eliminate single-frame chatter/noise
  * - Tracks continuous pinch hold duration (for activation/discharge gestures)
  * - Safe, deterministic, non-allocating per frame
@@ -82,6 +99,10 @@ class HandGestureDetector(
         val wrist = rawLandmarks[0]
         val thumbTip = rawLandmarks[4]
         val indexTip = rawLandmarks[8]
+        val middleTip = rawLandmarks[12]
+        val ringTip = rawLandmarks[16]
+        val pinkyTip = rawLandmarks[20]
+        val palmCenter = rawLandmarks[9] // Middle finger MCP joint
 
         val dx = (thumbTip.x() - indexTip.x()).toDouble()
         val dy = (thumbTip.y() - indexTip.y()).toDouble()
@@ -115,11 +136,21 @@ class HandGestureDetector(
         val centerX = (thumbTip.x() + indexTip.x()) / 2.0f
         val centerY = (thumbTip.y() + indexTip.y()) / 2.0f
 
+        // Multi-finger grip squeeze detection: average distance of fingertips to palm center
+        val avgTipDistToPalm = (
+            hypot((indexTip.x() - palmCenter.x()).toDouble(), (indexTip.y() - palmCenter.y()).toDouble()) +
+            hypot((middleTip.x() - palmCenter.x()).toDouble(), (middleTip.y() - palmCenter.y()).toDouble()) +
+            hypot((ringTip.x() - palmCenter.x()).toDouble(), (ringTip.y() - palmCenter.y()).toDouble()) +
+            hypot((pinkyTip.x() - palmCenter.x()).toDouble(), (pinkyTip.y() - palmCenter.y()).toDouble())
+        ).toFloat() / 4.0f
+
+        val isGripSqueeze = avgTipDistToPalm < 0.22f
+
         val pts = rawLandmarks.map { HandLandmarkPoint(it.x(), it.y()) }
-        val status = if (isPinching) {
-            "PINCH DETECTED (dist: ${"%.3f".format(distance)}, hold: ${holdDuration}ms)"
-        } else {
-            "HAND DETECTED (21 pts, dist: ${"%.3f".format(distance)})"
+        val status = when {
+            isGripSqueeze -> "GRIP SQUEEZE DETECTED (grip: ${"%.3f".format(avgTipDistToPalm)})"
+            isPinching -> "PINCH DETECTED (dist: ${"%.3f".format(distance)}, hold: ${holdDuration}ms)"
+            else -> "HAND DETECTED (21 pts, dist: ${"%.3f".format(distance)})"
         }
 
         return HandGestureState(
@@ -133,6 +164,8 @@ class HandGestureDetector(
             wristX = wrist.x(),
             wristY = wrist.y(),
             landmarks = pts,
+            isSqueezing = isGripSqueeze,
+            gripRatio = avgTipDistToPalm,
             diagnosticStatus = "$status | $pipelineDiagnostics",
             frameCount = processedFrames
         )

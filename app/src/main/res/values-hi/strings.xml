@@ -47,11 +47,17 @@
     <!-- Module 1: Electrical Fire Instructions -->
     <string name="instr_fire_detected">विद्युत आग का पता चला। अग्निशामक यंत्र की ओर बढ़ें।</string>
     <string name="instr_go_to_extinguisher">अग्निशामक यंत्र की ओर बढ़ें (लगभग 10 मी आगे)।</string>
-    <string name="instr_extinguisher_reached">अग्निशामक यंत्र तक पहुँच गए। नोजल खोलें।</string>
+    <string name="instr_extinguisher_reached">अग्निशामक यंत्र तक पहुँच गए। उठाने के लिए अंगूठे और तर्जनी को मिलाएं।</string>
+    <string name="instr_extinguisher_held">अग्निशामक यंत्र प्राप्त हुआ! विद्युत आग की ओर बढ़ें।</string>
+    <string name="instr_pull_pin">सुरक्षा पिन खींचें: अग्निशामक को अनलॉक करने के लिए सुरक्षा पिन खींचें।</string>
+    <string name="instr_aim_fire_base">आग के आधार पर निशाना लगाएं: नोजल को आग की लपटों के आधार पर रखें।</string>
+    <string name="instr_squeeze_lever">लीवर दबाएं: लीवर दबाने के लिए अपने हाथ को भींचें।</string>
+    <string name="instr_sweep_side_to_side">दाएं-बाएं घुमाएं: नोजल को आग के आधार पर एक तरफ से दूसरी तरफ घुमाएं।</string>
     <string name="instr_nozzle_reminder">कृपया अग्निशामक नोजल खोलें।</string>
     <string name="instr_aim_at_fire">अग्निशामक यंत्र को आग के आधार पर केंद्रित करें।</string>
     <string name="instr_discharge">अग्निशामक यंत्र डिस्चार्ज करने के लिए दबाएं।</string>
     <string name="instr_fire_extinguished">बहुत अच्छा। आग बुझा दी गई है।</string>
+    <string name="btn_squeeze_lever">लीवर दबाएं</string>
     <string name="btn_open_nozzle">नोजल खोलें</string>
     <string name="btn_discharge">अग्निशामक डिस्चार्ज करें</string>
     

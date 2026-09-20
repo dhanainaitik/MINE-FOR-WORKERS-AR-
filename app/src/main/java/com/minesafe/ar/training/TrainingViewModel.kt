@@ -42,11 +42,14 @@ class TrainingViewModel(
     private val _nozzleReminderTrigger = MutableStateFlow(0)
     val nozzleReminderTrigger: StateFlow<Int> = _nozzleReminderTrigger.asStateFlow()
 
+    private val _sweepProgress = MutableStateFlow(0f)
+    val sweepProgress: StateFlow<Float> = _sweepProgress.asStateFlow()
+
     private var timerJob: Job? = null
     private var reminderJob: Job? = null
 
     val totalSteps: Int
-        get() = 6
+        get() = if (_selectedModule.value == TrainingModule.ELECTRICAL_FIRE) 7 else 6
 
     fun selectModule(module: TrainingModule) {
         _selectedModule.value = module
@@ -65,6 +68,10 @@ class TrainingViewModel(
         _distanceToObjective.value = distance
     }
 
+    fun updateSweepProgress(progress: Float) {
+        _sweepProgress.value = progress.coerceIn(0f, 1f)
+    }
+
     fun updateState(newState: TrainingState) {
         if (_currentState.value != newState) {
             _currentState.value = newState
@@ -79,25 +86,27 @@ class TrainingViewModel(
                     startTimer()
                 }
 
-                // Module 1: Electrical Fire steps
+                // Module 1: Electrical Fire steps (PASS Protocol)
                 TrainingState.FIRE_DETECTED -> {
                     _stepsCompleted.value = 1
                 }
-                TrainingState.EXTINGUISHER_REACHED -> {
+                TrainingState.EXTINGUISHER_REACHED, TrainingState.EXTINGUISHER_HELD -> {
                     _stepsCompleted.value = 2
-                    startNozzleReminder()
                 }
-                TrainingState.OPEN_NOZZLE -> {
+                TrainingState.PULL_SAFETY_PIN, TrainingState.OPEN_NOZZLE -> {
                     _stepsCompleted.value = 3
                 }
-                TrainingState.AIM_AT_FIRE -> {
+                TrainingState.AIM_AT_FIRE_BASE, TrainingState.AIM_AT_FIRE -> {
                     _stepsCompleted.value = 4
                 }
-                TrainingState.DISCHARGE_EXTINGUISHER -> {
+                TrainingState.SQUEEZE_LEVER, TrainingState.DISCHARGE_EXTINGUISHER -> {
                     _stepsCompleted.value = 5
                 }
-                TrainingState.FIRE_EXTINGUISHED -> {
+                TrainingState.SWEEP_SIDE_TO_SIDE -> {
                     _stepsCompleted.value = 6
+                }
+                TrainingState.FIRE_EXTINGUISHED -> {
+                    _stepsCompleted.value = 7
                     stopTimer()
                 }
 
@@ -189,6 +198,7 @@ class TrainingViewModel(
         _mistakes.value = 0
         _stepsCompleted.value = 0
         _distanceToObjective.value = -1.0f
+        _sweepProgress.value = 0f
     }
 
     override fun onCleared() {
