@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -101,6 +102,13 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             AppScreen.TRAINING -> {
+                                BackHandler {
+                                    aManager.stopHazardSound()
+                                    aManager.stopMineAmbiance()
+                                    vManager.stop()
+                                    viewModel.resetTraining()
+                                    currentScreen = AppScreen.START
+                                }
                                 if (hasCameraPermission) {
                                     MainApp(
                                         viewModel = viewModel,
@@ -134,6 +142,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             AppScreen.RESULTS -> {
+                                BackHandler {
+                                    viewModel.resetTraining()
+                                    currentScreen = AppScreen.START
+                                }
                                 ResultsScreen(
                                     module = selectedModule,
                                     score = score,

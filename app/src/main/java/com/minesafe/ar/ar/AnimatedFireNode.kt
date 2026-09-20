@@ -22,7 +22,8 @@ import kotlin.math.sin
  */
 class AnimatedFireNode(
     engine: Engine,
-    modelLoader: ModelLoader
+    modelLoader: ModelLoader,
+    var baseScale: Float3 = Float3(1.75f, 1.75f, 1.75f)
 ) : Node(engine) {
 
     private val tag = "AnimatedFireNode"
@@ -45,11 +46,25 @@ class AnimatedFireNode(
                 modelInstance = fireInstance,
                 autoAnimate = true
             ).apply {
-                // Dimensions in GLB are width 0.86m, height 1.06m, depth 0.62m. Base is at Y = 0.0m.
-                // Scale 1.0f gives a realistic, natural human-sized industrial fire.
+                // Dimensions in GLB are width 0.86m, height 1.06m, depth 0.62m.
+                // Positioned directly below and around the lower portion of the wall-mounted electrical box.
                 position = Float3(0.0f, 0.0f, 0.0f)
                 rotation = Float3(0.0f, 0.0f, 0.0f)
-                scale = Float3(1.0f, 1.0f, 1.0f)
+                scale = baseScale
+
+                // Filter out any static campfire logs/grates so only pure animated electrical flames remain
+                try {
+                    renderableNodes.forEach { rNode ->
+                        val name = rNode.name
+                        if (name != null && (name.contains("Log", ignoreCase = true) ||
+                                             name.contains("Grate", ignoreCase = true) ||
+                                             name.contains("Ashes", ignoreCase = true))) {
+                            rNode.isVisible = false
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(tag, "RenderableNode filter: ${e.message}")
+                }
 
                 // Inspect and automatically start continuous indefinite animation playback
                 val count = animationCount
@@ -66,10 +81,26 @@ class AnimatedFireNode(
 
             addChildNode(modelNode)
             fireModelNode = modelNode
-            Log.i(tag, "AnimatedFireNode successfully initialized and added to scene")
+            Log.i(tag, "AnimatedFireNode successfully initialized and added to scene with baseScale $baseScale")
         } catch (e: Exception) {
             Log.e(tag, "Fatal error loading animated fire model: ${e.message}", e)
         }
+    }
+
+    fun stopAnimation() {
+        try {
+            if ((fireModelNode?.animationCount ?: 0) > 0) {
+                fireModelNode?.stopAnimation(0)
+                Log.i(tag, "Animated fire animation playback stopped")
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "Failed to stop fire animation: ${e.message}")
+        }
+    }
+
+    override fun destroy() {
+        stopAnimation()
+        super.destroy()
     }
 
     /**
@@ -78,17 +109,18 @@ class AnimatedFireNode(
      * to guarantee that the entire flame feels continuously alive, dynamic, and fluid.
      */
     override fun onFrame(frameTimeNanos: Long) {
+        if (!isVisible) return
         super.onFrame(frameTimeNanos)
         if (startNanos < 0) startNanos = frameTimeNanos
         val t = (frameTimeNanos - startNanos).toDouble() / 1_000_000_000.0
 
         val model = fireModelNode ?: return
 
-        // 1. Multi-harmonic flame stretch & contraction (upward heat thermal surging)
-        val stretchY = 1.0f + (0.040f * sin(t * 5.2).toFloat()) +
-                              (0.022f * sin(t * 8.7 + 1.1).toFloat())
-        val squashXZ = 1.0f - (0.020f * sin(t * 5.2).toFloat()) +
-                              (0.015f * cos(t * 7.3).toFloat())
+        // 1. Multi-harmonic flame stretch & contraction (upward heat thermal surging scaled with baseScale)
+        val stretchY = baseScale.y * (1.0f + (0.040f * sin(t * 5.2).toFloat()) +
+                                              (0.022f * sin(t * 8.7 + 1.1).toFloat()))
+        val squashXZ = baseScale.x * (1.0f - (0.020f * sin(t * 5.2).toFloat()) +
+                                              (0.015f * cos(t * 7.3).toFloat()))
         model.scale = Float3(squashXZ, stretchY, squashXZ)
 
         // 2. Subtle buoyant vertical pulsation & draft drift

@@ -26,6 +26,7 @@ import com.minesafe.ar.R
 import com.minesafe.ar.ar.AnimatedFireNode
 import com.minesafe.ar.ar.ChemicalHazardNode
 import com.minesafe.ar.ar.DoorwayNode
+import com.minesafe.ar.ar.ElectricalBoxNode
 import com.minesafe.ar.ar.EmergencyStationNode
 import com.minesafe.ar.ar.ExtinguisherNode
 import com.minesafe.ar.ar.FireNode
@@ -116,6 +117,7 @@ fun MainApp(
     var virtualMineContainer by remember { mutableStateOf<Node?>(null) }
 
     // Hazard and Equipment Node references
+    var electricalBoxNode by remember { mutableStateOf<ElectricalBoxNode?>(null) }
     var animatedFireNode by remember { mutableStateOf<AnimatedFireNode?>(null) }
     var fireNode by remember { mutableStateOf<FireNode?>(null) }
     var extinguisherNode by remember { mutableStateOf<ExtinguisherNode?>(null) }
@@ -136,6 +138,77 @@ fun MainApp(
     LaunchedEffect(nozzleReminderCount) {
         if (nozzleReminderCount > 0 && currentState == TrainingState.EXTINGUISHER_REACHED) {
             voiceManager.speak("Please open the extinguisher nozzle.")
+        }
+    }
+
+    // Module-scoped hazard lifecycle management:
+    // Ensures Module 02 (Chemical Hazard) never retains, loads, or plays fire assets/effects
+    LaunchedEffect(selectedModule) {
+        if (selectedModule == TrainingModule.CHEMICAL_HAZARD) {
+            electricalBoxNode?.let { box ->
+                box.isVisible = false
+                virtualMineContainer?.removeChildNode(box)
+                box.destroy()
+            }
+            electricalBoxNode = null
+
+            animatedFireNode?.let { node ->
+                node.stopAnimation()
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            animatedFireNode = null
+            audioManager.stopHazardSound()
+        } else if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
+            val container = virtualMineContainer
+            if (container != null) {
+                if (electricalBoxNode == null) {
+                    val electricalBox = ElectricalBoxNode(
+                        engine = engine,
+                        modelLoader = modelLoader
+                    ).apply {
+                        position = Float3(1.95f, 0.82f, -10.20f)
+                        rotation = Float3(0.0f, -135.0f, 0.0f)
+                    }
+                    container.addChildNode(electricalBox)
+                    electricalBoxNode = electricalBox
+                }
+                if (animatedFireNode == null) {
+                    val fireHazard = AnimatedFireNode(
+                        engine = engine,
+                        modelLoader = modelLoader,
+                        baseScale = Float3(1.30f, 1.30f, 1.30f)
+                    ).apply {
+                        position = Float3(1.92f, 0.38f, -10.15f)
+                        rotation = Float3(0.0f, -45.0f, 0.0f)
+                    }
+                    container.addChildNode(fireHazard)
+                    animatedFireNode = fireHazard
+                }
+            }
+        }
+    }
+
+    // Cleanup on leaving training screen
+    DisposableEffect(Unit) {
+        onDispose {
+            electricalBoxNode?.let { box ->
+                box.isVisible = false
+                virtualMineContainer?.removeChildNode(box)
+                box.destroy()
+            }
+            electricalBoxNode = null
+
+            animatedFireNode?.let { node ->
+                node.stopAnimation()
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            animatedFireNode = null
+            audioManager.stopHazardSound()
+            audioManager.stopMineAmbiance()
         }
     }
 
@@ -292,21 +365,39 @@ fun MainApp(
                                     )
                                     mineContainer.addChildNode(mineEnv)
 
-                                    // 4. Animated Fire Hazard (Visual only, continuous loop, beside railway)
-                                    val fireHazard = AnimatedFireNode(
-                                        engine = engine,
-                                        modelLoader = modelLoader
-                                    ).apply {
-                                        // Railway center is at X = -0.10m, wooden sleepers end at X = +0.60m, right mine wall is at X ≈ +2.5m.
-                                        // Existing electrical equipment box (Object_9) sits at X = +2.28m, Z = -10.55m.
-                                        // Position (1.35f, 0.0f, -10.5f) grounds the fire at Y = 0.0m on the bedrock,
-                                        // places it 1.45m to the side of the railway (railway completely clear),
-                                        // and directly in front of the electrical equipment.
-                                        position = Float3(1.35f, 0.0f, -10.5f)
-                                        rotation = Float3(0.0f, -10.0f, 0.0f)
+                                    // 4. Module-Scoped Hazard:
+                                    // Module 01: Electrical Fire Safety -> Industrial Electrical Box + Enlarged Animated Fire
+                                    // Module 02: Chemical Hazard Response -> NO electrical box, NO fire model, NO animation, NO fire effects
+                                    if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
+                                        // 4a. Industrial Electrical Box: Physically mounted on the side mine wall/timber support arch
+                                        val electricalBox = ElectricalBoxNode(
+                                            engine = engine,
+                                            modelLoader = modelLoader
+                                        ).apply {
+                                            // Wall-mounted flush against right mine wall / wooden support arch at chest height
+                                            // X = 1.95m, Y = 0.82m, Z = -10.20m; Yaw = -135.0f faces interior toward approaching worker
+                                            position = Float3(1.95f, 0.82f, -10.20f)
+                                            rotation = Float3(0.0f, -135.0f, 0.0f)
+                                        }
+                                        mineContainer.addChildNode(electricalBox)
+                                        electricalBoxNode = electricalBox
+
+                                        // 4b. Animated Fire Hazard: Positioned directly below and around lower portion of electrical box
+                                        val fireHazard = AnimatedFireNode(
+                                            engine = engine,
+                                            modelLoader = modelLoader,
+                                            baseScale = Float3(1.30f, 1.30f, 1.30f)
+                                        ).apply {
+                                            // Grounded below box at Y = 0.38m, rising up to Y = 1.76m, engulfing the box bottom (Y=0.82m) with zero gap
+                                            position = Float3(1.92f, 0.38f, -10.15f)
+                                            rotation = Float3(0.0f, -45.0f, 0.0f)
+                                        }
+                                        mineContainer.addChildNode(fireHazard)
+                                        animatedFireNode = fireHazard
+                                    } else {
+                                        electricalBoxNode = null
+                                        animatedFireNode = null
                                     }
-                                    mineContainer.addChildNode(fireHazard)
-                                    animatedFireNode = fireHazard
 
                                     childNodes = (childNodes - reticleNode) + anchorNode
                                     viewModel.updateState(TrainingState.ENTER_MINE)
@@ -455,9 +546,9 @@ fun MainApp(
 
                     // --- MODULE 1: FIRE PROXIMITY HUD ---
                     if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
-                        // Fire model is located at virtual (1.35, 0.0, -10.5)
-                        val fireVirtualZ = -10.5f
-                        val fireVirtualX = 1.35f
+                        // Electrical box and fire are wall-mounted at virtual (1.95, 0.82, -10.20)
+                        val fireVirtualZ = -10.20f
+                        val fireVirtualX = 1.95f
                         val distToFire = Math.hypot(
                             (workerVirtualX - fireVirtualX).toDouble(),
                             (workerVirtualZ - fireVirtualZ).toDouble()
