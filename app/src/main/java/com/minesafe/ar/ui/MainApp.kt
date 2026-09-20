@@ -25,6 +25,7 @@ import com.google.ar.core.TrackingState
 import androidx.compose.ui.platform.LocalContext
 import com.minesafe.ar.R
 import com.minesafe.ar.ar.ChemicalHazardNode
+import com.minesafe.ar.ar.ChemicalKitNode
 import com.minesafe.ar.ar.DoorwayNode
 import com.minesafe.ar.ar.ElectricalBoxNode
 import com.minesafe.ar.ar.VideoFireNode
@@ -124,6 +125,7 @@ fun MainApp(
     var fireNode by remember { mutableStateOf<FireNode?>(null) }
     var extinguisherNode by remember { mutableStateOf<ExtinguisherNode?>(null) }
     var chemicalNode by remember { mutableStateOf<ChemicalHazardNode?>(null) }
+    var chemicalKitNode by remember { mutableStateOf<ChemicalKitNode?>(null) }
     var emergencyStationNode by remember { mutableStateOf<EmergencyStationNode?>(null) }
 
     var isAimingAtFire by remember { mutableStateOf(false) }
@@ -170,7 +172,48 @@ fun MainApp(
             extinguisherNode = null
 
             audioManager.stopHazardSound()
+
+            val container = virtualMineContainer
+            if (container != null) {
+                if (chemicalKitNode == null) {
+                    val kit = ChemicalKitNode(
+                        engine = engine,
+                        modelLoader = modelLoader
+                    ).apply {
+                        position = Float3(-1.75f, 0.00f, -6.00f)
+                    }
+                    container.addChildNode(kit)
+                    chemicalKitNode = kit
+                }
+                if (chemicalNode == null) {
+                    val chem = ChemicalHazardNode(
+                        engine = engine,
+                        modelLoader = modelLoader,
+                        vaporMaterial = chemVaporMat,
+                        puddleMaterial = chemPuddleMat,
+                        perimeterMaterial = hazardYellowMat
+                    ).apply {
+                        position = Float3(0.00f, 0.00f, 0.00f)
+                    }
+                    container.addChildNode(chem)
+                    chemicalNode = chem
+                }
+            }
         } else if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
+            chemicalKitNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            chemicalKitNode = null
+
+            chemicalNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            chemicalNode = null
+
             val container = virtualMineContainer
             if (container != null) {
                 if (electricalBoxNode == null) {
@@ -236,6 +279,20 @@ fun MainApp(
                 node.destroy()
             }
             extinguisherNode = null
+
+            chemicalKitNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            chemicalKitNode = null
+
+            chemicalNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            chemicalNode = null
 
             audioManager.stopHazardSound()
             audioManager.stopMineAmbiance()
@@ -439,6 +496,29 @@ fun MainApp(
                                         electricalBoxNode = null
                                         videoFireNode = null
                                         extinguisherNode = null
+
+                                        // ASSET 1: Chemical Kit on LEFT side of virtual walking path before hazard
+                                        val kit = ChemicalKitNode(
+                                            engine = engine,
+                                            modelLoader = modelLoader
+                                        ).apply {
+                                            position = Float3(-1.75f, 0.00f, -6.00f)
+                                        }
+                                        mineContainer.addChildNode(kit)
+                                        chemicalKitNode = kit
+
+                                        // ASSETS 2 & 3: Chemical Hazard Area (chemical_tank.glb + metal_barrel.glb)
+                                        val chem = ChemicalHazardNode(
+                                            engine = engine,
+                                            modelLoader = modelLoader,
+                                            vaporMaterial = chemVaporMat,
+                                            puddleMaterial = chemPuddleMat,
+                                            perimeterMaterial = hazardYellowMat
+                                        ).apply {
+                                            position = Float3(0.00f, 0.00f, 0.00f)
+                                        }
+                                        mineContainer.addChildNode(chem)
+                                        chemicalNode = chem
                                     }
 
                                     childNodes = (childNodes - reticleNode) + anchorNode
@@ -461,8 +541,14 @@ fun MainApp(
                                 viewModel.updateState(TrainingState.AIM_AT_FIRE)
                             }
                         }
+                        TrainingState.LOCATE_EMERGENCY_EQUIPMENT -> {
+                            if (hitResult?.node == chemicalKitNode || hitResult?.node == chemicalKitNode?.modelNode || hitResult?.node == chemicalKitNode?.kitInteractiveTarget) {
+                                chemicalKitNode?.equipKit()
+                                viewModel.updateState(TrainingState.PERFORM_SAFE_RESPONSE)
+                            }
+                        }
                         TrainingState.PERFORM_SAFE_RESPONSE -> {
-                            if (hitResult?.node == emergencyStationNode?.isolationValve || hitResult?.node == emergencyStationNode?.isolationLever) {
+                            if (hitResult?.node == emergencyStationNode?.isolationValve || hitResult?.node == emergencyStationNode?.isolationLever || hitResult?.node == chemicalNode || hitResult?.node == chemicalNode?.tankModelNode) {
                                 emergencyStationNode?.activateValve()
                                 chemicalNode?.setHazardControlled(true)
                                 viewModel.updateState(TrainingState.HAZARD_CONTROLLED)
@@ -635,6 +721,19 @@ fun MainApp(
                             }
                         }
 
+                        val kitVirtualZ = -6.0f
+                        val kitVirtualX = -1.5f
+                        val distToKit = Math.hypot(
+                            (workerVirtualX - kitVirtualX).toDouble(),
+                            (workerVirtualZ - kitVirtualZ).toDouble()
+                        ).toFloat()
+
+                        if (currentState == TrainingState.LEAVE_HAZARD_ZONE && distToKit <= 2.5f) {
+                            mainHandler.post {
+                                viewModel.updateState(TrainingState.LOCATE_EMERGENCY_EQUIPMENT)
+                            }
+                        }
+
                         val stationVirtualZ = -12.5f
                         val stationVirtualX = -1.0f
                         val distToStation = Math.hypot(
@@ -642,7 +741,7 @@ fun MainApp(
                             (workerVirtualZ - stationVirtualZ).toDouble()
                         ).toFloat()
 
-                        if ((currentState == TrainingState.LEAVE_HAZARD_ZONE || currentState == TrainingState.LOCATE_EMERGENCY_EQUIPMENT) && distToStation <= 1.8f) {
+                        if ((currentState == TrainingState.LEAVE_HAZARD_ZONE || currentState == TrainingState.LOCATE_EMERGENCY_EQUIPMENT) && (distToStation <= 1.8f || distToKit <= 1.5f)) {
                             mainHandler.post {
                                 viewModel.updateState(TrainingState.PERFORM_SAFE_RESPONSE)
                             }
