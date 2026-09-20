@@ -162,6 +162,13 @@ fun MainApp(
             }
             electricalBoxNode = null
 
+            extinguisherNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            extinguisherNode = null
+
             audioManager.stopHazardSound()
         } else if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
             val container = virtualMineContainer
@@ -191,6 +198,16 @@ fun MainApp(
                     videoFireNode = fireVideo
                     fireVideo.startFire()
                 }
+                if (extinguisherNode == null) {
+                    val ext = ExtinguisherNode(
+                        engine = engine,
+                        modelLoader = modelLoader
+                    ).apply {
+                        position = Float3(-1.50f, 0.00f, -6.50f)
+                    }
+                    container.addChildNode(ext)
+                    extinguisherNode = ext
+                }
             }
         }
     }
@@ -212,6 +229,13 @@ fun MainApp(
                 node.destroy()
             }
             electricalBoxNode = null
+
+            extinguisherNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            extinguisherNode = null
 
             audioManager.stopHazardSound()
             audioManager.stopMineAmbiance()
@@ -401,9 +425,20 @@ fun MainApp(
                                         }
                                         mineContainer.addChildNode(fireVideo)
                                         videoFireNode = fireVideo
+
+                                        // 3. Fire Extinguisher: Standing upright on mine floor on the LEFT side of the walking path before the fire
+                                        val ext = ExtinguisherNode(
+                                            engine = engine,
+                                            modelLoader = modelLoader
+                                        ).apply {
+                                            position = Float3(-1.50f, 0.00f, -6.50f)
+                                        }
+                                        mineContainer.addChildNode(ext)
+                                        extinguisherNode = ext
                                     } else {
                                         electricalBoxNode = null
                                         videoFireNode = null
+                                        extinguisherNode = null
                                     }
 
                                     childNodes = (childNodes - reticleNode) + anchorNode
