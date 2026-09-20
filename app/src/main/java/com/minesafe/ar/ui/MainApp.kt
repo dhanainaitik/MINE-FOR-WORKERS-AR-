@@ -23,6 +23,7 @@ import com.google.ar.core.Plane
 import com.google.ar.core.Pose
 import com.google.ar.core.TrackingState
 import com.minesafe.ar.R
+import com.minesafe.ar.ar.AnimatedFireNode
 import com.minesafe.ar.ar.ChemicalHazardNode
 import com.minesafe.ar.ar.DoorwayNode
 import com.minesafe.ar.ar.EmergencyStationNode
@@ -115,6 +116,7 @@ fun MainApp(
     var virtualMineContainer by remember { mutableStateOf<Node?>(null) }
 
     // Hazard and Equipment Node references
+    var animatedFireNode by remember { mutableStateOf<AnimatedFireNode?>(null) }
     var fireNode by remember { mutableStateOf<FireNode?>(null) }
     var extinguisherNode by remember { mutableStateOf<ExtinguisherNode?>(null) }
     var chemicalNode by remember { mutableStateOf<ChemicalHazardNode?>(null) }
@@ -153,7 +155,7 @@ fun MainApp(
             TrainingState.FIRE_DETECTED -> {
                 audioManager.startMineAmbiance()
                 audioManager.startFireSound()
-                voiceManager.speak("Warning. Electrical fire detected. Move toward the fire extinguisher.")
+                voiceManager.speak("Warning. Electrical fire detected.")
             }
             TrainingState.EXTINGUISHER_REACHED -> {
                 audioManager.playSuccessChime()
@@ -290,65 +292,21 @@ fun MainApp(
                                     )
                                     mineContainer.addChildNode(mineEnv)
 
-                                    // 4. Training Hazards & Equipment inside the virtual mine container
-                                    if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
-                                        // Electrical Fire Cabinet (virtual Z = -11.0m, X = +0.8m)
-                                        val fNode = FireNode(
-                                            engine = engine,
-                                            cabinetMaterial = darkMetalMat,
-                                            fireCoreMaterial = fireCoreMat,
-                                            fireOuterMaterial = fireOuterMat,
-                                            smokeMaterial = smokeMat,
-                                            warningSignMaterial = hazardYellowMat
-                                        ).apply {
-                                            position = Float3(0.8f, 0.0f, -11.0f)
-                                        }
-                                        fireNode = fNode
-                                        mineContainer.addChildNode(fNode)
-
-                                        // Fire Extinguisher (virtual Z = -8.0m, X = +1.1m)
-                                        val extNode = ExtinguisherNode(
-                                            engine = engine,
-                                            redBodyMaterial = extRedMat,
-                                            metalMaterial = darkMetalMat,
-                                            brassMaterial = brassMat,
-                                            rubberMaterial = rubberMat,
-                                            sprayMaterial = sprayMat,
-                                            gaugeGreenMaterial = greenGaugeMat
-                                        ).apply {
-                                            position = Float3(1.1f, 0.0f, -8.0f)
-                                        }
-                                        extinguisherNode = extNode
-                                        mineContainer.addChildNode(extNode)
-                                    } else {
-                                        // Module 2: Chemical Hazard
-                                        val cNode = ChemicalHazardNode(
-                                            engine = engine,
-                                            drumYellowMaterial = hazardYellowMat,
-                                            hazardBandMaterial = hazardBandMat,
-                                            vaporMaterial = chemVaporMat,
-                                            puddleMaterial = chemPuddleMat,
-                                            pipeMaterial = pipeMat,
-                                            perimeterMaterial = hazardYellowMat
-                                        ).apply {
-                                            position = Float3(0.8f, 0.0f, -14.0f)
-                                        }
-                                        chemicalNode = cNode
-                                        mineContainer.addChildNode(cNode)
-
-                                        val eNode = EmergencyStationNode(
-                                            engine = engine,
-                                            boardMaterial = greenStationMat,
-                                            cabinetMaterial = hazardYellowMat,
-                                            valveMaterial = extRedMat,
-                                            metalMaterial = darkMetalMat,
-                                            whiteCrossMaterial = whiteMat
-                                        ).apply {
-                                            position = Float3(-1.0f, 0.0f, -12.5f)
-                                        }
-                                        emergencyStationNode = eNode
-                                        mineContainer.addChildNode(eNode)
+                                    // 4. Animated Fire Hazard (Visual only, continuous loop, beside railway)
+                                    val fireHazard = AnimatedFireNode(
+                                        engine = engine,
+                                        modelLoader = modelLoader
+                                    ).apply {
+                                        // Railway center is at X = -0.10m, wooden sleepers end at X = +0.60m, right mine wall is at X ≈ +2.5m.
+                                        // Existing electrical equipment box (Object_9) sits at X = +2.28m, Z = -10.55m.
+                                        // Position (1.35f, 0.0f, -10.5f) grounds the fire at Y = 0.0m on the bedrock,
+                                        // places it 1.45m to the side of the railway (railway completely clear),
+                                        // and directly in front of the electrical equipment.
+                                        position = Float3(1.35f, 0.0f, -10.5f)
+                                        rotation = Float3(0.0f, -10.0f, 0.0f)
                                     }
+                                    mineContainer.addChildNode(fireHazard)
+                                    animatedFireNode = fireHazard
 
                                     childNodes = (childNodes - reticleNode) + anchorNode
                                     viewModel.updateState(TrainingState.ENTER_MINE)
@@ -495,38 +453,22 @@ fun MainApp(
                     val workerVirtualZ = -virtualAdvance
                     val workerVirtualX = localCamX
 
-                    // --- MODULE 1: PROXIMITY & AIMING LOGIC ---
+                    // --- MODULE 1: FIRE PROXIMITY HUD ---
                     if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
-                        // Extinguisher is at virtual (1.1, 0.0, -8.0)
-                        val extVirtualZ = -8.0f
-                        val extVirtualX = 1.1f
-                        val distToExt = Math.hypot(
-                            (workerVirtualX - extVirtualX).toDouble(),
-                            (workerVirtualZ - extVirtualZ).toDouble()
+                        // Fire model is located at virtual (1.35, 0.0, -10.5)
+                        val fireVirtualZ = -10.5f
+                        val fireVirtualX = 1.35f
+                        val distToFire = Math.hypot(
+                            (workerVirtualX - fireVirtualX).toDouble(),
+                            (workerVirtualZ - fireVirtualZ).toDouble()
                         ).toFloat()
 
                         mainHandler.post {
-                            viewModel.updateDistanceToObjective(distToExt)
+                            viewModel.updateDistanceToObjective(distToFire)
                         }
 
-                        if ((currentState == TrainingState.FIRE_DETECTED || currentState == TrainingState.GO_TO_EXTINGUISHER) && distToExt <= 1.8f) {
-                            mainHandler.post {
-                                viewModel.updateState(TrainingState.EXTINGUISHER_REACHED)
-                            }
-                        }
-
-                        // Check Aiming vector toward the base of the fire
-                        val fPos = fireNode?.worldPosition
-                        if (fPos != null && (currentState == TrainingState.AIM_AT_FIRE || currentState == TrainingState.OPEN_NOZZLE)) {
-                            val camPos = Float3(cameraPose.tx(), cameraPose.ty(), cameraPose.tz())
-                            val camForward = Float3(cameraPose.zAxis[0], cameraPose.zAxis[1], cameraPose.zAxis[2]) * -1.0f
-                            val toFire = normalize(fPos - camPos)
-                            val aimCos = dot(camForward, toFire)
-
-                            mainHandler.post {
-                                isAimingAtFire = aimCos > 0.92f // within ~23 degrees of fire base
-                            }
-                        }
+                        // Fire visual hazard only: continuously burns indefinitely.
+                        // Extinguisher interactions and state completion will be implemented later.
                     }
 
                     // --- MODULE 2: CHEMICAL HAZARD DISTANCE & ISOLATION LOGIC ---
@@ -683,7 +625,7 @@ fun MainApp(
             val instructionDesc = when (currentState) {
                 TrainingState.START, TrainingState.SCAN_FLOOR, TrainingState.PLACE_DOORWAY -> "Point camera at the floor until surface is detected, then tap."
                 TrainingState.ENTER_MINE -> if (doorDistance > 0) String.format(Locale.US, "Doorway: %.2f m ahead (Walk forward to enter)", doorDistance) else "Walk forward through doorway"
-                TrainingState.FIRE_DETECTED -> "Target extinguisher ~8m virtual (Walk ~0.8m forward)"
+                TrainingState.FIRE_DETECTED -> "Electrical fire ahead beside railway"
                 TrainingState.EXTINGUISHER_REACHED -> "Tap nozzle or pull safety pin"
                 TrainingState.OPEN_NOZZLE, TrainingState.AIM_AT_FIRE -> if (isAimingAtFire) "Aimed at base of fire. Ready to discharge." else "Aim camera directly at base of fire"
                 TrainingState.DISCHARGE_EXTINGUISHER -> "Discharging suppression agent"

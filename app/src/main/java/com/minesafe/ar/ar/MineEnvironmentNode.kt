@@ -90,26 +90,6 @@ class MineEnvironmentNode(
         }
         addChildNode(terminalBulkhead)
 
-        // Additional natural rock contours for the far bulkhead
-        val rockPillar1 = CylinderNode(
-            engine,
-            radius = 1.2f,
-            height = 5.5f,
-            materialInstance = mat
-        ).apply {
-            position = Float3(-1.8f, 2.5f, -28.0f)
-        }
-        val rockPillar2 = CylinderNode(
-            engine,
-            radius = 1.4f,
-            height = 5.5f,
-            materialInstance = mat
-        ).apply {
-            position = Float3(1.9f, 2.5f, -27.8f)
-        }
-        addChildNode(rockPillar1)
-        addChildNode(rockPillar2)
-
         // C. Lateral Rock Outer Shell (Left and Right Bedrock Flanks)
         val leftRockShell = CubeNode(
             engine,
