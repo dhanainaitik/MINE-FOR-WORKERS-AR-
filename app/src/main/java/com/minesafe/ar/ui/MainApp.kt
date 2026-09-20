@@ -22,11 +22,12 @@ import com.google.ar.core.HitResult as ArHitResult
 import com.google.ar.core.Plane
 import com.google.ar.core.Pose
 import com.google.ar.core.TrackingState
+import androidx.compose.ui.platform.LocalContext
 import com.minesafe.ar.R
-import com.minesafe.ar.ar.AnimatedFireNode
 import com.minesafe.ar.ar.ChemicalHazardNode
 import com.minesafe.ar.ar.DoorwayNode
 import com.minesafe.ar.ar.ElectricalBoxNode
+import com.minesafe.ar.ar.VideoFireNode
 import com.minesafe.ar.ar.EmergencyStationNode
 import com.minesafe.ar.ar.ExtinguisherNode
 import com.minesafe.ar.ar.FireNode
@@ -60,6 +61,7 @@ fun MainApp(
     audioManager: AudioManager,
     onTrainingComplete: () -> Unit
 ) {
+    val context = LocalContext.current
     val selectedModule by viewModel.selectedModule.collectAsState()
     val currentState by viewModel.currentState.collectAsState()
     val score by viewModel.score.collectAsState()
@@ -118,7 +120,7 @@ fun MainApp(
 
     // Hazard and Equipment Node references
     var electricalBoxNode by remember { mutableStateOf<ElectricalBoxNode?>(null) }
-    var animatedFireNode by remember { mutableStateOf<AnimatedFireNode?>(null) }
+    var videoFireNode by remember { mutableStateOf<VideoFireNode?>(null) }
     var fireNode by remember { mutableStateOf<FireNode?>(null) }
     var extinguisherNode by remember { mutableStateOf<ExtinguisherNode?>(null) }
     var chemicalNode by remember { mutableStateOf<ChemicalHazardNode?>(null) }
@@ -145,46 +147,49 @@ fun MainApp(
     // Ensures Module 02 (Chemical Hazard) never retains, loads, or plays fire assets/effects
     LaunchedEffect(selectedModule) {
         if (selectedModule == TrainingModule.CHEMICAL_HAZARD) {
-            electricalBoxNode?.let { box ->
-                box.isVisible = false
-                virtualMineContainer?.removeChildNode(box)
-                box.destroy()
-            }
-            electricalBoxNode = null
-
-            animatedFireNode?.let { node ->
-                node.stopAnimation()
+            videoFireNode?.let { node ->
+                node.stopFire()
                 node.isVisible = false
                 virtualMineContainer?.removeChildNode(node)
                 node.destroy()
             }
-            animatedFireNode = null
+            videoFireNode = null
+
+            electricalBoxNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            electricalBoxNode = null
+
             audioManager.stopHazardSound()
         } else if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
             val container = virtualMineContainer
             if (container != null) {
                 if (electricalBoxNode == null) {
-                    val electricalBox = ElectricalBoxNode(
+                    val box = ElectricalBoxNode(
                         engine = engine,
                         modelLoader = modelLoader
                     ).apply {
                         position = Float3(1.95f, 0.82f, -10.20f)
                         rotation = Float3(0.0f, -135.0f, 0.0f)
                     }
-                    container.addChildNode(electricalBox)
-                    electricalBoxNode = electricalBox
+                    container.addChildNode(box)
+                    electricalBoxNode = box
                 }
-                if (animatedFireNode == null) {
-                    val fireHazard = AnimatedFireNode(
+                if (videoFireNode == null) {
+                    val fireVideo = VideoFireNode(
                         engine = engine,
-                        modelLoader = modelLoader,
-                        baseScale = Float3(1.30f, 1.30f, 1.30f)
+                        materialLoader = materialLoader,
+                        context = context,
+                        planeSize = Float3(1.10f, 0.65f, 0.0f)
                     ).apply {
-                        position = Float3(1.92f, 0.38f, -10.15f)
+                        position = Float3(1.85f, 1.14f, -10.10f)
                         rotation = Float3(0.0f, -45.0f, 0.0f)
                     }
-                    container.addChildNode(fireHazard)
-                    animatedFireNode = fireHazard
+                    container.addChildNode(fireVideo)
+                    videoFireNode = fireVideo
+                    fireVideo.startFire()
                 }
             }
         }
@@ -193,20 +198,21 @@ fun MainApp(
     // Cleanup on leaving training screen
     DisposableEffect(Unit) {
         onDispose {
-            electricalBoxNode?.let { box ->
-                box.isVisible = false
-                virtualMineContainer?.removeChildNode(box)
-                box.destroy()
-            }
-            electricalBoxNode = null
-
-            animatedFireNode?.let { node ->
-                node.stopAnimation()
+            videoFireNode?.let { node ->
+                node.stopFire()
                 node.isVisible = false
                 virtualMineContainer?.removeChildNode(node)
                 node.destroy()
             }
-            animatedFireNode = null
+            videoFireNode = null
+
+            electricalBoxNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            electricalBoxNode = null
+
             audioManager.stopHazardSound()
             audioManager.stopMineAmbiance()
         }
@@ -226,6 +232,7 @@ fun MainApp(
             }
             // Module 1: Electrical Fire
             TrainingState.FIRE_DETECTED -> {
+                videoFireNode?.startFire()
                 audioManager.startMineAmbiance()
                 audioManager.startFireSound()
                 voiceManager.speak("Warning. Electrical fire detected.")
@@ -245,6 +252,7 @@ fun MainApp(
                 audioManager.playExtinguisherDischarge()
             }
             TrainingState.FIRE_EXTINGUISHED -> {
+                videoFireNode?.stopFire()
                 audioManager.stopHazardSound()
                 audioManager.playSuccessChime()
                 voiceManager.speak("Training complete. The fire has been extinguished.")
@@ -366,37 +374,36 @@ fun MainApp(
                                     mineContainer.addChildNode(mineEnv)
 
                                     // 4. Module-Scoped Hazard:
-                                    // Module 01: Electrical Fire Safety -> Industrial Electrical Box + Enlarged Animated Fire
-                                    // Module 02: Chemical Hazard Response -> NO electrical box, NO fire model, NO animation, NO fire effects
+                                    // Module 01: Electrical Fire Safety -> Wall-Mounted Electrical Box + Looping MP4 Fire Video
+                                    // Module 02: Chemical Hazard Response -> NO fire/box asset, NO video, NO fire effects
                                     if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
-                                        // 4a. Industrial Electrical Box: Physically mounted on the side mine wall/timber support arch
-                                        val electricalBox = ElectricalBoxNode(
+                                        // 1. Industrial Electrical Box mounted on right mine wall / timber arch
+                                        val box = ElectricalBoxNode(
                                             engine = engine,
                                             modelLoader = modelLoader
                                         ).apply {
                                             // Wall-mounted flush against right mine wall / wooden support arch at chest height
-                                            // X = 1.95m, Y = 0.82m, Z = -10.20m; Yaw = -135.0f faces interior toward approaching worker
                                             position = Float3(1.95f, 0.82f, -10.20f)
                                             rotation = Float3(0.0f, -135.0f, 0.0f)
                                         }
-                                        mineContainer.addChildNode(electricalBox)
-                                        electricalBoxNode = electricalBox
+                                        mineContainer.addChildNode(box)
+                                        electricalBoxNode = box
 
-                                        // 4b. Animated Fire Hazard: Positioned directly below and around lower portion of electrical box
-                                        val fireHazard = AnimatedFireNode(
+                                        // 2. Video Fire Hazard Node: MP4 fire video directly in front of the electrical box
+                                        val fireVideo = VideoFireNode(
                                             engine = engine,
-                                            modelLoader = modelLoader,
-                                            baseScale = Float3(1.30f, 1.30f, 1.30f)
+                                            materialLoader = materialLoader,
+                                            context = context,
+                                            planeSize = Float3(1.10f, 0.65f, 0.0f)
                                         ).apply {
-                                            // Grounded below box at Y = 0.38m, rising up to Y = 1.76m, engulfing the box bottom (Y=0.82m) with zero gap
-                                            position = Float3(1.92f, 0.38f, -10.15f)
+                                            position = Float3(1.85f, 1.14f, -10.10f)
                                             rotation = Float3(0.0f, -45.0f, 0.0f)
                                         }
-                                        mineContainer.addChildNode(fireHazard)
-                                        animatedFireNode = fireHazard
+                                        mineContainer.addChildNode(fireVideo)
+                                        videoFireNode = fireVideo
                                     } else {
                                         electricalBoxNode = null
-                                        animatedFireNode = null
+                                        videoFireNode = null
                                     }
 
                                     childNodes = (childNodes - reticleNode) + anchorNode
@@ -556,10 +563,10 @@ fun MainApp(
 
                         mainHandler.post {
                             viewModel.updateDistanceToObjective(distToFire)
+                            isAimingAtFire = distToFire <= 4.5f
                         }
 
-                        // Fire visual hazard only: continuously burns indefinitely.
-                        // Extinguisher interactions and state completion will be implemented later.
+                        // Fire visual hazard: looping MP4 fire on electrical box
                     }
 
                     // --- MODULE 2: CHEMICAL HAZARD DISTANCE & ISOLATION LOGIC ---
@@ -852,7 +859,7 @@ fun MainApp(
                             if (isAimingAtFire) {
                                 viewModel.updateState(TrainingState.DISCHARGE_EXTINGUISHER)
                                 extinguisherNode?.setDischarging(true)
-                                fireNode?.setFireScale(0.0f)
+                                videoFireNode?.stopFire()
                                 viewModel.updateState(TrainingState.FIRE_EXTINGUISHED)
                             } else {
                                 viewModel.registerMistake(5)
