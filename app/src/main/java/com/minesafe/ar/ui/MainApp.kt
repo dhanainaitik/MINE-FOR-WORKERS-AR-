@@ -182,9 +182,9 @@ fun MainApp(
                         engine = engine,
                         materialLoader = materialLoader,
                         context = context,
-                        planeSize = Float3(1.10f, 0.65f, 0.0f)
+                        planeSize = Float3(2.50f, 1.40f, 0.0f)
                     ).apply {
-                        position = Float3(1.85f, 1.14f, -10.10f)
+                        position = Float3(1.80f, 1.14f, -10.05f)
                         rotation = Float3(0.0f, -45.0f, 0.0f)
                     }
                     container.addChildNode(fireVideo)
@@ -394,9 +394,9 @@ fun MainApp(
                                             engine = engine,
                                             materialLoader = materialLoader,
                                             context = context,
-                                            planeSize = Float3(1.10f, 0.65f, 0.0f)
+                                            planeSize = Float3(2.50f, 1.40f, 0.0f)
                                         ).apply {
-                                            position = Float3(1.85f, 1.14f, -10.10f)
+                                            position = Float3(1.80f, 1.14f, -10.05f)
                                             rotation = Float3(0.0f, -45.0f, 0.0f)
                                         }
                                         mineContainer.addChildNode(fireVideo)

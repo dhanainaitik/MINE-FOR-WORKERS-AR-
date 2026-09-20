@@ -30,7 +30,7 @@ class VideoFireNode(
     engine: Engine,
     materialLoader: MaterialLoader,
     private val context: Context,
-    val planeSize: Float3 = Float3(1.10f, 0.65f, 0.0f)
+    val planeSize: Float3 = Float3(2.50f, 1.40f, 0.0f)
 ) : Node(engine) {
 
     private val tag = "VideoFireNode"
