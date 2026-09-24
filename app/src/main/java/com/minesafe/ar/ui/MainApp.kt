@@ -50,8 +50,10 @@ import dev.romainguy.kotlin.math.Float4
 import dev.romainguy.kotlin.math.dot
 import dev.romainguy.kotlin.math.normalize
 import io.github.sceneview.ar.ARScene
+import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.arcore.createAnchorOrNull
 import io.github.sceneview.ar.node.AnchorNode
+import io.github.sceneview.ar.rememberARCameraNode
 import io.github.sceneview.collision.HitResult
 import io.github.sceneview.node.Node
 import io.github.sceneview.rememberEngine
@@ -164,6 +166,14 @@ fun MainApp(
         color = Float4(1.0f, 0.95f, 0.85f, 1.0f)
         intensity = 160000f
         lightDirection = Float3(0.15f, -0.75f, -0.65f)
+    }
+
+    // Camera node with extended far plane (150m) so that the entire authentic mine environment,
+    // including the curved section and the left-side continuation, remains 100% visible and unclipped.
+    val cameraNode = rememberARCameraNode(engine) {
+        ARSceneView.createARCameraNode(engine).apply {
+            far = 150.0f
+        }
     }
 
     // Periodic nozzle reminder reaction
@@ -419,6 +429,7 @@ fun MainApp(
             modifier = Modifier.fillMaxSize(),
             engine = engine,
             mainLightNode = mainLight,
+            cameraNode = cameraNode,
             childNodes = childNodes,
             planeRenderer = (doorwayAnchor == null),
             sessionConfiguration = { _, config ->

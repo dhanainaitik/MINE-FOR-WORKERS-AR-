@@ -20,6 +20,7 @@
     <string name="language">Language</string>
     <string name="english">English</string>
     <string name="hindi">हिन्दी</string>
+    <string name="santali">संताली</string>
     <string name="restart_training">RETRY TRAINING</string>
     <string name="back_to_home">BACK TO MODULES</string>
     <string name="close">CLOSE</string>

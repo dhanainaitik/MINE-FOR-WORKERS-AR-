@@ -57,6 +57,11 @@ class MineEnvironmentNode(
                     rotation = Float3(0.0f, 0.0f, 0.0f)
                     scale = Float3(1.0f, 1.0f, 1.0f)
                 }
+                // Ensure Filament frustum culling is disabled on all renderables of the authentic mine model
+                // so that the curved section and left-side continuation geometry are never culled prematurely
+                mineNode.renderableNodes.forEach {
+                    it.setCulling(false)
+                }
                 addChildNode(mineNode)
                 Log.d(tag, "Successfully loaded AR_Mine_Optimized.glb as the main mine environment")
             } catch (e: Exception) {
@@ -65,91 +70,8 @@ class MineEnvironmentNode(
         }
 
         // =========================================================================
-        // 2. SUBTERRANEAN ROCK ENCLOSURE & TERMINUS BULKHEAD
-        // Guarantees zero background leakage from the real room (Requirement 11)
-        // =========================================================================
-        val mat = darkRockMaterial ?: rockMaterial
-
-        // A. Continuous Sub-Floor Bedrock (covers Z = 0.2m to -30.0m)
-        val bedrockSubFloor = CubeNode(
-            engine,
-            size = Float3(14.0f, 0.15f, 31.0f),
-            materialInstance = mat
-        ).apply {
-            position = Float3(0.0f, -0.08f, -15.0f)
-        }
-        addChildNode(bedrockSubFloor)
-
-        // B. Far Terminus Rock Bulkhead (seals the open end of the tunnel at Z = -28.5m)
-        val terminalBulkhead = CubeNode(
-            engine,
-            size = Float3(14.0f, 8.0f, 1.5f),
-            materialInstance = mat
-        ).apply {
-            position = Float3(0.0f, 3.5f, -28.5f)
-        }
-        addChildNode(terminalBulkhead)
-
-        // C. Lateral Rock Outer Shell (Left and Right Bedrock Flanks)
-        val leftRockShell = CubeNode(
-            engine,
-            size = Float3(1.5f, 7.5f, 30.0f),
-            materialInstance = mat
-        ).apply {
-            position = Float3(-5.2f, 3.5f, -14.5f)
-        }
-        val rightRockShell = CubeNode(
-            engine,
-            size = Float3(1.5f, 7.5f, 30.0f),
-            materialInstance = mat
-        ).apply {
-            position = Float3(5.2f, 3.5f, -14.5f)
-        }
-        addChildNode(leftRockShell)
-        addChildNode(rightRockShell)
-
-        // D. Overburden Rock Vault (Upper Bedrock Ceiling Cap)
-        val ceilingVault = CubeNode(
-            engine,
-            size = Float3(14.0f, 1.2f, 30.0f),
-            materialInstance = mat
-        ).apply {
-            position = Float3(0.0f, 5.2f, -14.5f)
-        }
-        addChildNode(ceilingVault)
-
-        // E. Portal Rock Face (Surrounds the doorway frame at Z = 0.0m)
-        // Left portal rock wing
-        val leftPortalFace = CubeNode(
-            engine,
-            size = Float3(4.0f, 5.0f, 0.6f),
-            materialInstance = mat
-        ).apply {
-            position = Float3(-2.65f, 2.5f, 0.0f)
-        }
-        // Right portal rock wing
-        val rightPortalFace = CubeNode(
-            engine,
-            size = Float3(4.0f, 5.0f, 0.6f),
-            materialInstance = mat
-        ).apply {
-            position = Float3(2.65f, 2.5f, 0.0f)
-        }
-        // Top portal rock arch header
-        val topPortalFace = CubeNode(
-            engine,
-            size = Float3(1.5f, 2.6f, 0.6f),
-            materialInstance = mat
-        ).apply {
-            position = Float3(0.0f, 3.6f, 0.0f)
-        }
-        addChildNode(leftPortalFace)
-        addChildNode(rightPortalFace)
-        addChildNode(topPortalFace)
-
-        // =========================================================================
-        // 3. UNDERGROUND PRACTICAL MINE LIGHTING
-        // Positioned along the tunnel path and illuminating the model's lantern points
+        // UNDERGROUND PRACTICAL MINE LIGHTING
+        // Authentically illuminates the initial tunnel, the curved section, and the left-side continuation
         // =========================================================================
         val lights = listOf(
             // Portal entrance threshold
@@ -165,9 +87,19 @@ class MineEnvironmentNode(
             // Wall lantern station deeper inside (Z = -12.8m)
             Triple(Float3(-1.8f, 2.4f, -12.8f), 40000f, 6.5f),
             // Mid tunnel chamber
-            Triple(Float3(0.0f, 2.5f, -18.0f), 35000f, 7.5f),
-            // Deep drift & terminal bulkhead
-            Triple(Float3(0.0f, 2.5f, -25.0f), 30000f, 8.0f)
+            Triple(Float3(0.0f, 2.5f, -17.5f), 40000f, 7.5f),
+            // Approach to curved section
+            Triple(Float3(-0.6f, 2.2f, -20.5f), 45000f, 7.5f),
+            // Inside the curved bend
+            Triple(Float3(-2.8f, 1.8f, -22.5f), 45000f, 7.5f),
+            // Curve transition into left-side continuation
+            Triple(Float3(-5.0f, 1.2f, -24.5f), 45000f, 7.5f),
+            // Left drift start
+            Triple(Float3(-7.5f, 0.6f, -25.0f), 42000f, 7.5f),
+            // Left drift mid section
+            Triple(Float3(-10.5f, 0.0f, -25.0f), 42000f, 7.5f),
+            // Far left drift terminus
+            Triple(Float3(-13.5f, -0.6f, -25.0f), 38000f, 7.5f)
         )
 
         for ((pos, intensity, falloff) in lights) {

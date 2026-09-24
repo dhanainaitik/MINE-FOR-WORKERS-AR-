@@ -74,7 +74,7 @@ fun SettingsModal(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Button(
@@ -83,7 +83,8 @@ fun SettingsModal(
                             containerColor = if (currentLanguage == "en") Color(0xFFFFD54F) else Color(0xFF374151),
                             contentColor = if (currentLanguage == "en") Color.Black else Color.White
                         ),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
                     ) {
                         Text(stringResource(R.string.english), fontWeight = FontWeight.Bold)
                     }
@@ -94,9 +95,22 @@ fun SettingsModal(
                             containerColor = if (currentLanguage == "hi") Color(0xFFFFD54F) else Color(0xFF374151),
                             contentColor = if (currentLanguage == "hi") Color.Black else Color.White
                         ),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
                     ) {
                         Text(stringResource(R.string.hindi), fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { onLanguageChange("sat") },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (currentLanguage == "sat") Color(0xFFFFD54F) else Color(0xFF374151),
+                            contentColor = if (currentLanguage == "sat") Color.Black else Color.White
+                        ),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Text(stringResource(R.string.santali), fontWeight = FontWeight.Bold)
                     }
                 }
 

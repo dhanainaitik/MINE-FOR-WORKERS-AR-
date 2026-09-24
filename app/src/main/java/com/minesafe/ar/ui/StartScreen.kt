@@ -279,7 +279,11 @@ fun StartScreen(
 
                     OutlinedButton(
                         onClick = {
-                            val nextLang = if (currentLanguage == "en") "hi" else "en"
+                            val nextLang = when (currentLanguage) {
+                                "en" -> "hi"
+                                "hi" -> "sat"
+                                else -> "en"
+                            }
                             onLanguageSelected(nextLang)
                         },
                         modifier = Modifier.weight(1f),
@@ -287,7 +291,11 @@ fun StartScreen(
                         border = BorderStroke(1.dp, Color(0xFFFFD54F))
                     ) {
                         Text(
-                            text = if (currentLanguage == "en") "HI" else "EN",
+                            text = when (currentLanguage) {
+                                "en" -> "HI"
+                                "hi" -> "SAT"
+                                else -> "EN"
+                            },
                             color = Color(0xFFFFD54F),
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.labelMedium
