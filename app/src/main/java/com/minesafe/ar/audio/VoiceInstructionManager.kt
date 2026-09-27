@@ -76,6 +76,8 @@ class VoiceInstructionManager(context: Context) : TextToSpeech.OnInitListener {
         "Keep the lever squeezed while sweeping." to "घुमाते समय लीवर को दबाकर रखें।",
         "Fire extinguished. Good job following safety procedures." to "आग बुझ गई है। सुरक्षा नियमों का पालन करने के लिए बहुत अच्छा।",
         "Fire extinguished! Excellent job following safety procedures." to "आग बुझ गई! सुरक्षा नियमों का पालन करने के लिए शाबाश।",
+        "Evacuation guide deployed! Follow the hologram along the emergency route." to "निकासी गाइड सक्रिय! आपातकालीन मार्ग पर होलोग्राम का अनुसरण करें।",
+        "Evacuation route complete! Safe exit reached." to "निकासी मार्ग पूरा हुआ! सुरक्षित निकास तक पहुंच गए।",
 
         // Module 2: Chemical Hazard Safety
         "Chemical hazard detected. Do not approach the leak." to "रासायनिक खतरे का पता चला है। रिसाव के पास न जाएं।",
@@ -113,6 +115,8 @@ class VoiceInstructionManager(context: Context) : TextToSpeech.OnInitListener {
         "Keep the lever squeezed while sweeping." to "बिहुर जोखोः लीवर ओता काते दोहोय मे।",
         "Fire extinguished. Good job following safety procedures." to "सेंगॆल इरिज एना। सुरक्षा नियम पांजा ला़गिद आडी नापाय कामि।",
         "Fire extinguished! Excellent job following safety procedures." to "सेंगॆल इरिज एना! सुरक्षा नियम पांजा ला़गिद आडी सरेश कामि।",
+        "Evacuation guide deployed! Follow the hologram along the emergency route." to "खाली गाइड चालु एना! इमरजेंसी डाहार रे होलोग्राम पांजा मे।",
+        "Evacuation route complete! Safe exit reached." to "खाली डाहार पूराव एना! बांचाव दुआर सूर ते सेटेर एना।",
 
         // Module 2: Chemical Hazard Safety
         "Chemical hazard detected. Do not approach the leak." to "केमिकल खतरा ञाम एना। लिक सूर ते आलोम चालावा।",

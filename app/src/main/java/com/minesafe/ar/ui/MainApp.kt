@@ -34,6 +34,7 @@ import com.minesafe.ar.ar.ElectricalBoxNode
 import com.minesafe.ar.ar.FireAlarmNode
 import com.minesafe.ar.ar.VideoFireNode
 import com.minesafe.ar.ar.EmergencyStationNode
+import com.minesafe.ar.ar.EvacuationHologramNode
 import com.minesafe.ar.ar.ExtinguisherHoldingState
 import com.minesafe.ar.ar.ExtinguisherNode
 import com.minesafe.ar.ar.FireNode
@@ -109,6 +110,9 @@ fun MainApp(
     val greenStationMat = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF2E7D32), 0.1f, 0.40f, 0.4f) }
     val whiteMat = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFFFFFFFF), 0.0f, 0.30f, 0.5f) }
     val blackDoorwayMat = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFF141414), 0.15f, 0.35f, 0.2f) }
+    val holoCyanMat = remember(materialLoader) { materialLoader.createColorInstance(Color(0xCC00E5FF), 0.0f, 0.15f, 0.9f) }
+    val holoAccentMat = remember(materialLoader) { materialLoader.createColorInstance(Color(0xEE80D8FF), 0.0f, 0.10f, 1.0f) }
+    val holoHeadlampMat = remember(materialLoader) { materialLoader.createColorInstance(Color(0xFFE0F7FA), 0.0f, 0.05f, 1.0f) }
 
     // AR Placement Reticle for horizontal floor detection
     val reticleNode = remember(engine, reticleWhiteMat) {
@@ -142,6 +146,9 @@ fun MainApp(
     var chemicalKitNode by remember { mutableStateOf<ChemicalKitNode?>(null) }
     var emergencyStationNode by remember { mutableStateOf<EmergencyStationNode?>(null) }
     var signBoardNode by remember { mutableStateOf<SignBoardNode?>(null) }
+    var evacuationHologramNode by remember { mutableStateOf<EvacuationHologramNode?>(null) }
+    var isEvacuationRouteComplete by remember { mutableStateOf(false) }
+    var lastFrameNanos by remember { mutableStateOf(0L) }
 
     var isAimingAtFire by remember { mutableStateOf(false) }
     var dangerZoneWarningTriggered by remember { mutableStateOf(false) }
@@ -224,6 +231,14 @@ fun MainApp(
                 node.destroy()
             }
             fireAlarmNode = null
+
+            evacuationHologramNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            evacuationHologramNode = null
+            isEvacuationRouteComplete = false
 
             audioManager.stopHazardSound()
             audioManager.stopEvacuationSiren()
@@ -360,6 +375,14 @@ fun MainApp(
                 node.destroy()
             }
             fireAlarmNode = null
+
+            evacuationHologramNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            evacuationHologramNode = null
+            isEvacuationRouteComplete = false
 
             chemicalKitNode?.let { node ->
                 node.isVisible = false
@@ -690,7 +713,7 @@ fun MainApp(
                                 audioManager.playAlarmPullLatchSound()
                                 audioManager.startEvacuationSiren()
                                 audioManager.playSuccessChime()
-                                voiceManager.speak("Fire alarm activated! Evacuation siren initiated. Proceed to the fire extinguisher.")
+                                voiceManager.speak("Fire alarm activated! Evacuation guide deployed! Follow the hologram along the emergency route.")
                                 viewModel.updateState(TrainingState.FIRE_ALARM_ACTIVATED)
                                 viewModel.updateState(TrainingState.GO_TO_EXTINGUISHER)
                             }
@@ -846,9 +869,43 @@ fun MainApp(
                     val workerVirtualX = navPos.virtualX
                     val workerVirtualZ = navPos.virtualZ
 
+                    val currentTimestampNanos = frame.timestamp
+                    val dt = if (lastFrameNanos > 0L) {
+                        ((currentTimestampNanos - lastFrameNanos).toDouble() / 1_000_000_000.0).toFloat().coerceIn(0.001f, 0.1f)
+                    } else {
+                        0.016f
+                    }
+                    lastFrameNanos = currentTimestampNanos
+
                     // --- MODULE 1: FIRE, ALARM & EXTINGUISHER PROXIMITY & GESTURE INTERACTION ---
                     if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
                         handTrackingManager.processFrame(frame)
+
+                        val isAlarmPulled = fireAlarmNode?.isPulled == true
+
+                        // Auto-deploy 3D Evacuation Hologram Guide upon alarm activation
+                        val mineCont = virtualMineContainer
+                        if (mineCont != null && isAlarmPulled && evacuationHologramNode == null) {
+                            val holo = EvacuationHologramNode(
+                                engine = engine,
+                                bodyMaterial = holoCyanMat,
+                                accentMaterial = holoAccentMat,
+                                headlampMaterial = holoHeadlampMat,
+                                navSystem = mineNavSystem
+                            ).apply {
+                                onEvacuationComplete = {
+                                    mainHandler.post {
+                                        isEvacuationRouteComplete = true
+                                        audioManager.playSuccessChime()
+                                        voiceManager.speak("Evacuation route complete! Safe exit reached.")
+                                    }
+                                }
+                            }
+                            mineCont.addChildNode(holo)
+                            evacuationHologramNode = holo
+                            holo.startEvacuation(startProgress = 4.20f)
+                        }
+                        evacuationHologramNode?.update(dt)
 
                         val alarmVirtualZ = -4.20f
                         val alarmVirtualX = 1.78f
@@ -871,7 +928,6 @@ fun MainApp(
                             (workerVirtualZ - fireVirtualZ).toDouble()
                         ).toFloat()
 
-                        val isAlarmPulled = fireAlarmNode?.isPulled == true
                         val isExtHeld = extinguisherNode?.holdingState == ExtinguisherHoldingState.HELD
 
                         val currentObjectiveDist = when {
@@ -910,7 +966,7 @@ fun MainApp(
                                     audioManager.startEvacuationSiren()
                                     audioManager.playSuccessChime()
                                     viewModel.updateState(TrainingState.FIRE_ALARM_ACTIVATED)
-                                    voiceManager.speak("Fire alarm activated! Evacuation siren initiated. Proceed to the fire extinguisher.")
+                                    voiceManager.speak("Fire alarm activated! Evacuation guide deployed! Follow the hologram along the emergency route.")
                                     viewModel.updateState(TrainingState.GO_TO_EXTINGUISHER)
                                 }
                             }
@@ -1371,6 +1427,28 @@ fun MainApp(
                         }
                     }
 
+                    if (evacuationHologramNode?.isEvacuationActive == true) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        val (holoBadgeColor, holoBadgeText) = if (isEvacuationRouteComplete) {
+                            Color(0xFF00C853) to "✓ SAFE ZONE REACHED"
+                        } else {
+                            Color(0xFF00B0FF) to "🏃 FOLLOW HOLOGRAM"
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = holoBadgeColor.copy(alpha = 0.92f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.40f))
+                        ) {
+                            Text(
+                                text = holoBadgeText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
                     if (isExtHeld) {
                         Spacer(modifier = Modifier.width(6.dp))
                         val (procBg, procText) = when (currentState) {
@@ -1426,7 +1504,7 @@ fun MainApp(
                 TrainingState.START, TrainingState.SCAN_FLOOR, TrainingState.PLACE_DOORWAY -> "Point camera at the floor until surface is detected, then tap."
                 TrainingState.ENTER_MINE -> if (doorDistance > 0) String.format(Locale.US, "Doorway: %.2f m ahead (Walk forward to enter)", doorDistance) else "Walk forward through doorway"
                 TrainingState.FIRE_DETECTED, TrainingState.PULL_FIRE_ALARM -> "Pinch (🤏) the PULL DOWN lever on the wall fire alarm"
-                TrainingState.FIRE_ALARM_ACTIVATED, TrainingState.GO_TO_EXTINGUISHER -> "Evacuation siren active! Proceed forward to the fire extinguisher"
+                TrainingState.FIRE_ALARM_ACTIVATED, TrainingState.GO_TO_EXTINGUISHER -> if (evacuationHologramNode?.isEvacuationActive == true) "Evacuation hologram deployed! Follow it along the route" else "Evacuation siren active! Proceed forward to the fire extinguisher"
                 TrainingState.EXTINGUISHER_REACHED -> "Bring thumb & index finger together (pinch 🤏) to pick up extinguisher"
                 TrainingState.EXTINGUISHER_HELD -> "Approach the electrical fire (~4m ahead)"
                 TrainingState.PULL_SAFETY_PIN -> "Pinch (🤏) the safety pin ring to remove it"
@@ -1434,6 +1512,8 @@ fun MainApp(
                 TrainingState.SQUEEZE_LEVER -> "Squeeze hand (✊) to depress lever and discharge"
                 TrainingState.SWEEP_SIDE_TO_SIDE -> "Keep lever squeezed! Sweep nozzle left-to-right across flames (${(sweepProgress * 100).toInt()}%)"
                 TrainingState.DISCHARGE_EXTINGUISHER -> "Discharging suppression agent"
+                TrainingState.FIRE_EXTINGUISHED -> if (isEvacuationRouteComplete) "Evacuation complete! Safe exit reached." else if (evacuationHologramNode?.isEvacuationActive == true) "Follow the evacuation hologram along the tracks to the exit." else "Fire suppressed successfully!"
+                TrainingState.TRAINING_COMPLETE -> if (isEvacuationRouteComplete) "Evacuation route complete! Safe zone reached." else "All safety objectives successfully achieved."
                 TrainingState.CHEMICAL_HAZARD_DETECTED -> "Stay at least 2.0m away from toxic vapor"
                 TrainingState.LEAVE_HAZARD_ZONE -> "Retreat to clear vantage point"
                 TrainingState.PERFORM_SAFE_RESPONSE -> "Turn emergency isolation valve on wall"
@@ -1551,7 +1631,7 @@ fun MainApp(
                             audioManager.playAlarmPullLatchSound()
                             audioManager.startEvacuationSiren()
                             audioManager.playSuccessChime()
-                            voiceManager.speak("Fire alarm activated! Evacuation siren initiated. Proceed to the fire extinguisher.")
+                            voiceManager.speak("Fire alarm activated! Evacuation guide deployed! Follow the hologram along the emergency route.")
                             viewModel.updateState(TrainingState.FIRE_ALARM_ACTIVATED)
                             viewModel.updateState(TrainingState.GO_TO_EXTINGUISHER)
                         },
