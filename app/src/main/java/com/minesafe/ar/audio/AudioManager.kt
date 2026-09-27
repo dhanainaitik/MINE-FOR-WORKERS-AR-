@@ -24,6 +24,7 @@ class AudioManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Default)
     private var ambientJob: Job? = null
     private var hazardAudioJob: Job? = null
+    private var sirenJob: Job? = null
     var isMuted: Boolean = false
 
     /**
@@ -348,8 +349,87 @@ class AudioManager(private val context: Context) {
             .build()
     }
 
+    /**
+     * Mine-wide continuous oscillating evacuation siren:
+     * High-volume piercing industrial alarm sweeping between 520Hz and 880Hz
+     * alerting all personnel underground of an emergency evacuation.
+     */
+    fun startEvacuationSiren() {
+        stopEvacuationSiren()
+        if (isMuted) return
+        sirenJob = scope.launch {
+            val sampleRate = 22050
+            val bufferSize = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            ).coerceAtLeast(sampleRate)
+
+            val track = createAudioTrack(sampleRate, bufferSize)
+            track.play()
+            val buffer = ShortArray(bufferSize)
+            var phase = 0.0
+            var sirenTime = 0.0
+
+            try {
+                while (isActive && !isMuted) {
+                    for (i in buffer.indices) {
+                        val t = sirenTime + (i.toDouble() / sampleRate)
+                        // Oscillating siren frequency: 520Hz to 880Hz sweeping every 1.6s
+                        val cycle = (t % 1.6) / 1.6
+                        val sweep = if (cycle < 0.5) cycle * 2.0 else (1.0 - cycle) * 2.0
+                        val freq = 520.0 + sweep * 360.0
+
+                        // Siren wave with harmonics (fundamental + 3rd harmonic for piercing industrial sound)
+                        val s1 = sin(phase)
+                        val s2 = sin(phase * 2.0) * 0.3
+                        val s3 = sin(phase * 3.0) * 0.15
+                        val sirenSample = (s1 + s2 + s3) / 1.45
+
+                        buffer[i] = (sirenSample * 26000f).toInt().coerceIn(-32767, 32767).toShort()
+
+                        phase += 2.0 * PI * freq / sampleRate
+                        if (phase > 2.0 * PI) phase -= 2.0 * PI
+                    }
+                    sirenTime += buffer.size.toDouble() / sampleRate
+                    track.write(buffer, 0, buffer.size)
+                }
+            } finally {
+                try {
+                    track.stop()
+                    track.release()
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    fun stopEvacuationSiren() {
+        sirenJob?.cancel()
+        sirenJob = null
+    }
+
+    /**
+     * Mechanical fire alarm pull-station latch click / spring snap.
+     */
+    fun playAlarmPullLatchSound() {
+        if (isMuted) return
+        scope.launch {
+            val sampleRate = 22050
+            val len = (sampleRate * 0.18f).toInt()
+            val buffer = ShortArray(len)
+            for (i in 0 until len) {
+                val t = i.toFloat() / sampleRate
+                val env = (1.0f - (i.toFloat() / len)).coerceAtLeast(0f)
+                val click = sin(2.0 * PI * 340.0 * t).toFloat() + (Random.nextFloat() * 2f - 1f) * 0.45f
+                buffer[i] = (click * env * 26000f).toInt().coerceIn(-32767, 32767).toShort()
+            }
+            playBuffer(buffer, sampleRate)
+        }
+    }
+
     fun shutdown() {
         stopMineAmbiance()
         stopHazardSound()
+        stopEvacuationSiren()
     }
 }

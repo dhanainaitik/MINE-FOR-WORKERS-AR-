@@ -87,7 +87,10 @@ class TrainingViewModel(
                 }
 
                 // Module 1: Electrical Fire steps (PASS Protocol)
-                TrainingState.FIRE_DETECTED -> {
+                TrainingState.FIRE_DETECTED, TrainingState.PULL_FIRE_ALARM -> {
+                    _stepsCompleted.value = 1
+                }
+                TrainingState.FIRE_ALARM_ACTIVATED, TrainingState.GO_TO_EXTINGUISHER -> {
                     _stepsCompleted.value = 1
                 }
                 TrainingState.EXTINGUISHER_REACHED, TrainingState.EXTINGUISHER_HELD -> {

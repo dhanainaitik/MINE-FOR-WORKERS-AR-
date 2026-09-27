@@ -1,9 +1,11 @@
 package com.minesafe.ar.ar
 
+import android.content.Context
 import android.util.Log
 import com.google.android.filament.Engine
 import com.google.android.filament.MaterialInstance
 import dev.romainguy.kotlin.math.Float3
+import io.github.sceneview.loaders.MaterialLoader
 import io.github.sceneview.loaders.ModelLoader
 import io.github.sceneview.node.CubeNode
 import io.github.sceneview.node.ModelNode
@@ -23,12 +25,16 @@ enum class ExtinguisherHoldingState {
  * - Interactive 3D Safety Pin Assembly: animates extraction and drops away upon pin-pull gesture
  * - Interactive 3D Operating Lever: physically compresses down by 16° when squeezed
  * - High-velocity suppression spray cone issuing from nozzle during discharge
+ * - Integrated VideoSprayNode playing looping fog video from nozzle tip upon discharge
  * - Positioned on the left side of the walking path before the electrical fire
  * - Strictly module-scoped to Module 01 (Electrical Fire Safety); never instantiated in Module 02
  */
 class ExtinguisherNode(
     engine: Engine,
     modelLoader: ModelLoader,
+    materialLoader: MaterialLoader? = null,
+    context: Context? = null,
+    var cameraNode: Node? = null,
     brassMaterial: MaterialInstance? = null,
     leverMaterial: MaterialInstance? = null,
     sprayMaterial: MaterialInstance? = null
@@ -43,6 +49,8 @@ class ExtinguisherNode(
     val leverAssembly: Node = Node(engine)
     val sprayEffectNode: Node = Node(engine)
     val nozzleAnchor: Node = Node(engine)
+    var videoSprayNode: VideoSprayNode? = null
+        private set
 
     var isPinRemoved: Boolean = false
         private set
@@ -118,8 +126,30 @@ class ExtinguisherNode(
         }
         addChildNode(leverAssembly)
 
-        addChildNode(sprayEffectNode)
+        // 3. Extinguisher Nozzle Orifice & Spray Discharge Anchor
+        // Positioned at the nozzle tip in front of the cylinder body
+        nozzleAnchor.apply {
+            position = Float3(0.02f, 0.46f, -0.16f)
+            rotation = Float3(0.0f, 0.0f, 0.0f)
+        }
         addChildNode(nozzleAnchor)
+        addChildNode(sprayEffectNode)
+
+        // 4. Attach VideoSprayNode (3D volumetric camera-facing fog spray) to nozzle anchor
+        if (materialLoader != null && context != null) {
+            try {
+                val spray = VideoSprayNode(engine, materialLoader, context, cameraNode)
+                nozzleAnchor.addChildNode(spray)
+                videoSprayNode = spray
+                Log.i(tag, "VideoSprayNode successfully attached to extinguisher nozzleAnchor")
+            } catch (e: Exception) {
+                Log.e(tag, "Error creating VideoSprayNode: ${e.message}", e)
+            }
+        }
+    }
+
+    fun updateCameraOrientation(camRot: Float3) {
+        videoSprayNode?.updateCameraOrientation(camRot)
     }
 
     fun setHeld(held: Boolean) {
@@ -154,8 +184,14 @@ class ExtinguisherNode(
     }
 
     fun setDischarging(active: Boolean) {
+        if (isDischarging == active) return
         isDischarging = active
         sprayEffectNode.isVisible = active
+        if (active) {
+            videoSprayNode?.startSpray()
+        } else {
+            videoSprayNode?.stopSpray()
+        }
     }
 
     fun openNozzle() {
@@ -163,6 +199,16 @@ class ExtinguisherNode(
     }
 
     override fun destroy() {
+        try {
+            videoSprayNode?.let { spray ->
+                spray.stopSpray()
+                nozzleAnchor.removeChildNode(spray)
+                spray.destroy()
+            }
+            videoSprayNode = null
+        } catch (e: Exception) {
+            Log.w(tag, "Error releasing videoSprayNode in destroy: ${e.message}")
+        }
         super.destroy()
     }
 }

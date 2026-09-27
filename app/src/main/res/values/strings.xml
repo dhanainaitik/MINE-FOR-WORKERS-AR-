@@ -46,8 +46,11 @@
     <string name="doorway_sign_sub">-- ENTER TO EXPLORE --</string>
     
     <!-- Module 1: Electrical Fire Instructions (Sequential PASS) -->
-    <string name="instr_fire_detected">Electrical fire detected. Move toward the fire extinguisher.</string>
+    <string name="instr_pull_alarm">EMERGENCY: Pull the wall fire alarm to initiate mine evacuation.</string>
+    <string name="instr_alarm_activated">Fire alarm activated! Evacuation siren initiated. Proceed to extinguisher.</string>
+    <string name="instr_fire_detected">Electrical fire detected. Move toward the wall fire alarm.</string>
     <string name="instr_go_to_extinguisher">Move toward the fire extinguisher (~10m ahead).</string>
+    <string name="btn_pull_alarm">PULL FIRE ALARM</string>
     <string name="instr_extinguisher_reached">Fire extinguisher reached. Pinch thumb and index to pick up.</string>
     <string name="instr_extinguisher_held">Extinguisher acquired! Approach the electrical fire.</string>
     <string name="instr_pull_pin">PULL SAFETY PIN: Pull the safety pin to unlock extinguisher.</string>

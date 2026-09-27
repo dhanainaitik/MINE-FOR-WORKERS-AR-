@@ -56,6 +56,9 @@ class VoiceInstructionManager(context: Context) : TextToSpeech.OnInitListener {
         "Physically walk toward the doorway to enter the mine." to "खदान में प्रवेश करने के लिए द्वार की ओर बढ़ें।",
 
         // Module 1: Electrical Fire Safety (Sequential PASS)
+        "Warning. Electrical fire detected ahead. Pull the wall fire alarm to initiate mine evacuation." to "चेतावनी। आगे बिजली की आग लगी है। खदान खाली कराने के लिए दीवार पर लगे फायर अलार्म को खींचें।",
+        "Pinch your thumb and index finger to pull down the fire alarm lever." to "फायर अलार्म का लीवर खींचने के लिए अपने अंगूठे और तर्जनी को मिलाएं।",
+        "Fire alarm activated! Evacuation siren initiated. Proceed to the fire extinguisher." to "फायर अलार्म चालू हो गया! निकासी सायरन शुरू हुआ। अग्निशामक यंत्र की ओर बढ़ें।",
         "Warning. Electrical fire detected ahead. Move toward the fire extinguisher." to "चेतावनी। आगे बिजली की आग लगी है। अग्निशामक यंत्र की ओर बढ़ें।",
         "Please open the extinguisher nozzle." to "कृपया अग्निशामक का नोज़ल खोलें।",
         "Pinch your thumb and index finger to pick up the fire extinguisher." to "अग्निशामक यंत्र उठाने के लिए अपने अंगूठे और तर्जनी को मिलाएं।",
@@ -90,6 +93,9 @@ class VoiceInstructionManager(context: Context) : TextToSpeech.OnInitListener {
         "Physically walk toward the doorway to enter the mine." to "खदान भितरी बोलोन ला़गिद दुआर सेद ताड़ाम मे।",
 
         // Module 1: Electrical Fire Safety (Sequential PASS)
+        "Warning. Electrical fire detected ahead. Pull the wall fire alarm to initiate mine evacuation." to "हुसियार। माढ़ंग रे बिजली सेंगॆल लागाव आकाना। खदान खाली ला़गिद कांत रे लागाव अलार्म ओर मे।",
+        "Pinch your thumb and index finger to pull down the fire alarm lever." to "अलार्म लीवर ओर ला़गिद अंगूठा आर इतुरिसी कतूब चिमटा मे।",
+        "Fire alarm activated! Evacuation siren initiated. Proceed to the fire extinguisher." to "फायर अलार्म चालु एना! खाली साइरन जोलोः काना। सेंगॆल इरिज सामान सेद चालाव मे।",
         "Warning. Electrical fire detected ahead. Move toward the fire extinguisher." to "हुसियार। माढ़ंग रे बिजली सेंगॆल लागाव आकाना। सेंगॆल इरिज सामान सेद चालाव मे।",
         "Please open the extinguisher nozzle." to "दया काते सेंगॆल इरिज नोज़ल झिज मे।",
         "Pinch your thumb and index finger to pick up the fire extinguisher." to "सेंगॆल इरिज सामान तुल ला़गिद अंगूठा आर इतुरिसी कतूब चिमटा मे।",

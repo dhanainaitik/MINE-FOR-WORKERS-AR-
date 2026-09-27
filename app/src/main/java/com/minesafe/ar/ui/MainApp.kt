@@ -31,6 +31,7 @@ import com.minesafe.ar.ar.ChemicalHazardNode
 import com.minesafe.ar.ar.ChemicalKitNode
 import com.minesafe.ar.ar.DoorwayNode
 import com.minesafe.ar.ar.ElectricalBoxNode
+import com.minesafe.ar.ar.FireAlarmNode
 import com.minesafe.ar.ar.VideoFireNode
 import com.minesafe.ar.ar.EmergencyStationNode
 import com.minesafe.ar.ar.ExtinguisherHoldingState
@@ -38,6 +39,8 @@ import com.minesafe.ar.ar.ExtinguisherNode
 import com.minesafe.ar.ar.FireNode
 import com.minesafe.ar.ar.MineEnvironmentNode
 import com.minesafe.ar.ar.PlacementReticleNode
+import com.minesafe.ar.ar.MineNavigationSystem
+import com.minesafe.ar.ar.SignBoardNode
 import com.minesafe.ar.gestures.HandGestureState
 import com.minesafe.ar.gestures.HandTrackingManager
 import com.minesafe.ar.audio.AudioManager
@@ -126,15 +129,19 @@ fun MainApp(
 
     // Virtual Mine Container Node: Holds the mine and shifts along +Z for 10x virtual walking amplification
     var virtualMineContainer by remember { mutableStateOf<Node?>(null) }
+    val mineNavSystem = remember { MineNavigationSystem() }
+    var isScreenHeld by remember { mutableStateOf(false) }
 
     // Hazard and Equipment Node references
     var electricalBoxNode by remember { mutableStateOf<ElectricalBoxNode?>(null) }
     var videoFireNode by remember { mutableStateOf<VideoFireNode?>(null) }
     var fireNode by remember { mutableStateOf<FireNode?>(null) }
+    var fireAlarmNode by remember { mutableStateOf<FireAlarmNode?>(null) }
     var extinguisherNode by remember { mutableStateOf<ExtinguisherNode?>(null) }
     var chemicalNode by remember { mutableStateOf<ChemicalHazardNode?>(null) }
     var chemicalKitNode by remember { mutableStateOf<ChemicalKitNode?>(null) }
     var emergencyStationNode by remember { mutableStateOf<EmergencyStationNode?>(null) }
+    var signBoardNode by remember { mutableStateOf<SignBoardNode?>(null) }
 
     var isAimingAtFire by remember { mutableStateOf(false) }
     var dangerZoneWarningTriggered by remember { mutableStateOf(false) }
@@ -147,6 +154,7 @@ fun MainApp(
     var stableHandX by remember { mutableFloatStateOf(0.5f) }
     var stableHandY by remember { mutableFloatStateOf(0.5f) }
     var stableYaw by remember { mutableFloatStateOf(0f) }
+    var manualSqueezeActive by remember { mutableStateOf(false) }
 
     // MediaPipe Hand Gesture Tracking (Module 1: Electrical Fire Safety)
     var handGestureState by remember { mutableStateOf(HandGestureState()) }
@@ -210,7 +218,15 @@ fun MainApp(
             }
             extinguisherNode = null
 
+            fireAlarmNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            fireAlarmNode = null
+
             audioManager.stopHazardSound()
+            audioManager.stopEvacuationSiren()
 
             val container = virtualMineContainer
             if (container != null) {
@@ -281,15 +297,30 @@ fun MainApp(
                     videoFireNode = fireVideo
                     fireVideo.startFire()
                 }
+                if (fireAlarmNode == null) {
+                    val alarm = FireAlarmNode(
+                        engine = engine,
+                        modelLoader = modelLoader,
+                        indicatorMaterial = extRedMat
+                    ).apply {
+                        position = Float3(1.78f, 1.25f, -4.20f)
+                        rotation = Float3(0.0f, 165.0f, 0.0f)
+                    }
+                    container.addChildNode(alarm)
+                    fireAlarmNode = alarm
+                }
                 if (extinguisherNode == null) {
                     val ext = ExtinguisherNode(
                         engine = engine,
                         modelLoader = modelLoader,
+                        materialLoader = materialLoader,
+                        context = context,
+                        cameraNode = cameraNode,
                         brassMaterial = brassMat,
                         leverMaterial = extRedMat,
                         sprayMaterial = sprayMat
                     ).apply {
-                        position = Float3(-1.50f, 0.00f, -6.50f)
+                        position = Float3(-1.50f, 0.00f, -6.80f)
                     }
                     container.addChildNode(ext)
                     extinguisherNode = ext
@@ -323,6 +354,13 @@ fun MainApp(
             }
             extinguisherNode = null
 
+            fireAlarmNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            fireAlarmNode = null
+
             chemicalKitNode?.let { node ->
                 node.isVisible = false
                 virtualMineContainer?.removeChildNode(node)
@@ -337,7 +375,15 @@ fun MainApp(
             }
             chemicalNode = null
 
+            signBoardNode?.let { node ->
+                node.isVisible = false
+                virtualMineContainer?.removeChildNode(node)
+                node.destroy()
+            }
+            signBoardNode = null
+
             audioManager.stopHazardSound()
+            audioManager.stopEvacuationSiren()
             audioManager.stopMineAmbiance()
         }
     }
@@ -359,6 +405,15 @@ fun MainApp(
                 videoFireNode?.startFire()
                 audioManager.startMineAmbiance()
                 audioManager.startFireSound()
+                voiceManager.speak("Warning. Electrical fire detected ahead. Pull the wall fire alarm to initiate mine evacuation.")
+            }
+            TrainingState.PULL_FIRE_ALARM -> {
+                voiceManager.speak("Pinch your thumb and index finger to pull down the fire alarm lever.")
+            }
+            TrainingState.FIRE_ALARM_ACTIVATED -> {
+                // Siren started upon gesture trigger
+            }
+            TrainingState.GO_TO_EXTINGUISHER -> {
                 voiceManager.speak("Warning. Electrical fire detected ahead. Move toward the fire extinguisher.")
             }
             TrainingState.EXTINGUISHER_REACHED -> {
@@ -386,6 +441,7 @@ fun MainApp(
             TrainingState.FIRE_EXTINGUISHED -> {
                 videoFireNode?.stopFire()
                 audioManager.stopHazardSound()
+                audioManager.stopEvacuationSiren()
                 audioManager.playSuccessChime()
                 voiceManager.speak("Fire extinguished. Good job following safety procedures.")
                 delay(3000)
@@ -438,6 +494,12 @@ fun MainApp(
                 config.lightEstimationMode = Config.LightEstimationMode.DISABLED
             },
             onTouchEvent = { e: MotionEvent, hitResult: HitResult? ->
+                if (doorwayAnchor != null) {
+                    when (e.action) {
+                        MotionEvent.ACTION_DOWN -> isScreenHeld = true
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> isScreenHeld = false
+                    }
+                }
                 if (e.action == MotionEvent.ACTION_UP) {
                     // Tap to place Black AR Doorway on detected floor
                     if (doorwayAnchor == null && (currentState == TrainingState.START || currentState == TrainingState.SCAN_FLOOR || currentState == TrainingState.PLACE_DOORWAY)) {
@@ -485,6 +547,7 @@ fun MainApp(
                                 if (anchor != null) {
                                     doorwayAnchor = anchor
                                     reticleNode.isVisible = false
+                                    mineNavSystem.reset()
                                     val anchorNode = AnchorNode(engine, anchor)
 
                                     // 1. Black AR Doorway Frame (Stands vertically, anchored to real floor)
@@ -505,6 +568,23 @@ fun MainApp(
                                         darkRockMaterial = rockMat
                                     )
                                     mineContainer.addChildNode(mineEnv)
+
+                                    // 4. Directional Evacuation Sign Board:
+                                    // Mounted naturally on mine timber support beam at the junction before the first left curve,
+                                    // positioned at eye level (Y = 1.40m) facing approaching player,
+                                    // arrow pointing toward the actual right evacuation tunnel.
+                                    val signBoard = SignBoardNode(
+                                        engine = engine,
+                                        materialLoader = materialLoader,
+                                        context = context,
+                                        timberMaterial = rockMat,
+                                        metalMaterial = darkMetalMat
+                                    ).apply {
+                                        position = Float3(-1.45f, 0.00f, -20.20f)
+                                        rotation = Float3(0.0f, 18.0f, 0.0f)
+                                    }
+                                    mineContainer.addChildNode(signBoard)
+                                    signBoardNode = signBoard
 
                                     // 4. Module-Scoped Hazard:
                                     // Module 01: Electrical Fire Safety -> Wall-Mounted Electrical Box + Looping MP4 Fire Video
@@ -535,21 +615,37 @@ fun MainApp(
                                         mineContainer.addChildNode(fireVideo)
                                         videoFireNode = fireVideo
 
-                                        // 3. Fire Extinguisher: Standing upright on mine floor on the LEFT side of the walking path before the fire
+                                        // 3. Fire Alarm Station: Mounted flush on right mine wall at chest height before the extinguisher
+                                        val alarm = FireAlarmNode(
+                                            engine = engine,
+                                            modelLoader = modelLoader,
+                                            indicatorMaterial = extRedMat
+                                        ).apply {
+                                            position = Float3(1.78f, 1.25f, -4.20f)
+                                            rotation = Float3(0.0f, 165.0f, 0.0f)
+                                        }
+                                        mineContainer.addChildNode(alarm)
+                                        fireAlarmNode = alarm
+
+                                        // 4. Fire Extinguisher: Standing upright on mine floor on the LEFT side of the walking path before the fire
                                         val ext = ExtinguisherNode(
                                             engine = engine,
                                             modelLoader = modelLoader,
+                                            materialLoader = materialLoader,
+                                            context = context,
+                                            cameraNode = cameraNode,
                                             brassMaterial = brassMat,
                                             leverMaterial = extRedMat,
                                             sprayMaterial = sprayMat
                                         ).apply {
-                                            position = Float3(-1.50f, 0.00f, -6.50f)
+                                            position = Float3(-1.50f, 0.00f, -6.80f)
                                         }
                                         mineContainer.addChildNode(ext)
                                         extinguisherNode = ext
                                     } else {
                                         electricalBoxNode = null
                                         videoFireNode = null
+                                        fireAlarmNode = null
                                         extinguisherNode = null
 
                                         // ASSET 1: Chemical Kit on LEFT side of virtual walking path before hazard
@@ -588,6 +684,17 @@ fun MainApp(
 
                     // Interactive touch actions on 3D equipment (Pickup is strictly gesture-driven via thumb-index pinch)
                     when (currentState) {
+                        TrainingState.FIRE_DETECTED, TrainingState.PULL_FIRE_ALARM -> {
+                            if (hitResult?.node == fireAlarmNode || hitResult?.node == fireAlarmNode?.modelNode || hitResult?.node == fireAlarmNode?.alarmInteractiveTarget) {
+                                fireAlarmNode?.triggerAlarm()
+                                audioManager.playAlarmPullLatchSound()
+                                audioManager.startEvacuationSiren()
+                                audioManager.playSuccessChime()
+                                voiceManager.speak("Fire alarm activated! Evacuation siren initiated. Proceed to the fire extinguisher.")
+                                viewModel.updateState(TrainingState.FIRE_ALARM_ACTIVATED)
+                                viewModel.updateState(TrainingState.GO_TO_EXTINGUISHER)
+                            }
+                        }
                         TrainingState.LOCATE_EMERGENCY_EQUIPMENT -> {
                             if (hitResult?.node == chemicalKitNode || hitResult?.node == chemicalKitNode?.modelNode || hitResult?.node == chemicalKitNode?.kitInteractiveTarget) {
                                 chemicalKitNode?.equipKit()
@@ -685,7 +792,25 @@ fun MainApp(
                     val sinTheta = Math.sin(anchorYawRad.toDouble()).toFloat()
 
                     val localCamX = cosTheta * dx - sinTheta * dz
+                    val localCamY = dy
                     val localCamZ = sinTheta * dx + cosTheta * dz
+
+                    // Calculate camera forward heading in mine space
+                    val forwardX = -cameraPose.zAxis[0]
+                    val forwardY = -cameraPose.zAxis[1]
+                    val forwardZ = -cameraPose.zAxis[2]
+                    val localFwdX = cosTheta * forwardX - sinTheta * forwardZ
+                    val localFwdY = forwardY
+                    val localFwdZ = sinTheta * forwardX + cosTheta * forwardZ
+
+                    // Horizontal unit forward vector
+                    val fwdLen = Math.hypot(localFwdX.toDouble(), localFwdZ.toDouble()).toFloat().coerceAtLeast(0.001f)
+                    val uFwdX = localFwdX / fwdLen
+                    val uFwdZ = localFwdZ / fwdLen
+
+                    // Horizontal unit right vector: (uFwdZ, 0, -uFwdX)
+                    val uRightX = uFwdZ
+                    val uRightZ = -uFwdX
 
                     mainHandler.post {
                         doorDistance = if (localCamZ > 0) localCamZ else 0f
@@ -703,27 +828,36 @@ fun MainApp(
                     }
 
                     // =========================================================================
-                    // 10X MOVEMENT AMPLIFICATION (Requirements 8 & 9)
-                    // 1 metre of physical forward walking = 10 metres of virtual mine movement
+                    // 3D MINE NAVIGATION & PHYSICAL COLLISION SYSTEM
+                    // Continuous full traversal: Starting point -> first tunnel -> right curve -> second mine -> terminus
+                    // 10X movement amplification along walking direction + collision boundaries + ground tracking
                     // =========================================================================
-                    // When worker crosses the doorway (localCamZ < 0):
-                    // Physical penetration depth: p = -localCamZ
-                    // Virtual penetration: V = 10 * p
-                    // Virtual mine container shifts along +Z by Delta = 9 * p
-                    val p = (-localCamZ).coerceAtLeast(0f)
-                    val virtualAdvance = p * 10f
-                    val mineShiftZ = p * 9f
+                    val navPos = mineNavSystem.update(
+                        localCamX = localCamX,
+                        localCamY = localCamY,
+                        localCamZ = localCamZ,
+                        uFwdX = uFwdX,
+                        uFwdZ = uFwdZ,
+                        isManualAdvancing = isScreenHeld
+                    )
 
-                    virtualMineContainer?.position = Float3(0f, 0f, mineShiftZ)
+                    virtualMineContainer?.position = Float3(navPos.mineShiftX, navPos.mineShiftY, navPos.mineShiftZ)
 
-                    val workerVirtualZ = -virtualAdvance
-                    val workerVirtualX = localCamX
+                    val workerVirtualX = navPos.virtualX
+                    val workerVirtualZ = navPos.virtualZ
 
-                    // --- MODULE 1: FIRE & EXTINGUISHER PROXIMITY & GESTURE INTERACTION ---
+                    // --- MODULE 1: FIRE, ALARM & EXTINGUISHER PROXIMITY & GESTURE INTERACTION ---
                     if (selectedModule == TrainingModule.ELECTRICAL_FIRE) {
                         handTrackingManager.processFrame(frame)
 
-                        val extVirtualZ = -6.50f
+                        val alarmVirtualZ = -4.20f
+                        val alarmVirtualX = 1.78f
+                        val distToAlarm = Math.hypot(
+                            (workerVirtualX - alarmVirtualX).toDouble(),
+                            (workerVirtualZ - alarmVirtualZ).toDouble()
+                        ).toFloat()
+
+                        val extVirtualZ = -6.80f
                         val extVirtualX = -1.50f
                         val distToExt = Math.hypot(
                             (workerVirtualX - extVirtualX).toDouble(),
@@ -737,38 +871,26 @@ fun MainApp(
                             (workerVirtualZ - fireVirtualZ).toDouble()
                         ).toFloat()
 
+                        val isAlarmPulled = fireAlarmNode?.isPulled == true
                         val isExtHeld = extinguisherNode?.holdingState == ExtinguisherHoldingState.HELD
 
+                        val currentObjectiveDist = when {
+                            !isAlarmPulled -> distToAlarm
+                            !isExtHeld -> distToExt
+                            else -> distToFire
+                        }
+
                         mainHandler.post {
-                            viewModel.updateDistanceToObjective(if (!isExtHeld) distToExt else distToFire)
+                            viewModel.updateDistanceToObjective(currentObjectiveDist)
                             isAimingAtFire = isExtHeld && (distToFire <= 4.5f)
                         }
 
-                        // Transition: Approach extinguisher
-                        if (!isExtHeld && distToExt <= 2.2f && (currentState == TrainingState.FIRE_DETECTED || currentState == TrainingState.GO_TO_EXTINGUISHER)) {
+                        // 1. Approach wall fire alarm
+                        if (!isAlarmPulled && distToAlarm <= 2.2f && currentState == TrainingState.FIRE_DETECTED) {
                             mainHandler.post {
-                                viewModel.updateState(TrainingState.EXTINGUISHER_REACHED)
+                                viewModel.updateState(TrainingState.PULL_FIRE_ALARM)
                             }
                         }
-
-                        // Calculate camera forward heading in mine space
-                        val forwardX = -cameraPose.zAxis[0]
-                        val forwardY = -cameraPose.zAxis[1]
-                        val forwardZ = -cameraPose.zAxis[2]
-                        val cosT = Math.cos(anchorYawRad.toDouble()).toFloat()
-                        val sinT = Math.sin(anchorYawRad.toDouble()).toFloat()
-                        val localFwdX = cosT * forwardX - sinT * forwardZ
-                        val localFwdY = forwardY
-                        val localFwdZ = sinT * forwardX + cosT * forwardZ
-
-                        // Horizontal unit forward vector
-                        val fwdLen = Math.hypot(localFwdX.toDouble(), localFwdZ.toDouble()).toFloat().coerceAtLeast(0.001f)
-                        val uFwdX = localFwdX / fwdLen
-                        val uFwdZ = localFwdZ / fwdLen
-
-                        // Horizontal unit right vector: (uFwdZ, 0, -uFwdX)
-                        val uRightX = uFwdZ
-                        val uRightZ = -uFwdX
 
                         // Smooth hand tracking with low-pass filter (eliminates frame-dropping snap)
                         if (handGestureState.isHandPresent) {
@@ -779,8 +901,30 @@ fun MainApp(
                             stableHandY += (0.5f - stableHandY) * 0.03f
                         }
 
-                        // Interaction 0: Pick Up Extinguisher with Pinch (debounced hold >= 80ms)
-                        if (!isExtHeld && distToExt <= 2.5f && (currentState == TrainingState.EXTINGUISHER_REACHED || currentState == TrainingState.FIRE_DETECTED)) {
+                        // 2. Activate Fire Alarm with Pinch Gesture (debounced >= 80ms)
+                        if (!isAlarmPulled && distToAlarm <= 2.8f && (currentState == TrainingState.FIRE_DETECTED || currentState == TrainingState.PULL_FIRE_ALARM)) {
+                            if (handGestureState.isPinchPickupTriggered()) {
+                                mainHandler.post {
+                                    fireAlarmNode?.triggerAlarm()
+                                    audioManager.playAlarmPullLatchSound()
+                                    audioManager.startEvacuationSiren()
+                                    audioManager.playSuccessChime()
+                                    viewModel.updateState(TrainingState.FIRE_ALARM_ACTIVATED)
+                                    voiceManager.speak("Fire alarm activated! Evacuation siren initiated. Proceed to the fire extinguisher.")
+                                    viewModel.updateState(TrainingState.GO_TO_EXTINGUISHER)
+                                }
+                            }
+                        }
+
+                        // 3. Transition: Approach extinguisher (only unlocked after alarm is pulled)
+                        if (isAlarmPulled && !isExtHeld && distToExt <= 2.2f && (currentState == TrainingState.GO_TO_EXTINGUISHER || currentState == TrainingState.FIRE_ALARM_ACTIVATED)) {
+                            mainHandler.post {
+                                viewModel.updateState(TrainingState.EXTINGUISHER_REACHED)
+                            }
+                        }
+
+                        // 4. Interaction 0: Pick Up Extinguisher with Pinch (debounced hold >= 80ms)
+                        if (isAlarmPulled && !isExtHeld && distToExt <= 2.5f && (currentState == TrainingState.EXTINGUISHER_REACHED || currentState == TrainingState.GO_TO_EXTINGUISHER)) {
                             if (handGestureState.isPinchPickupTriggered()) {
                                 val targetYawDeg = Math.toDegrees(Math.atan2((-uFwdX).toDouble(), (-uFwdZ).toDouble())).toFloat()
                                 stableYaw = targetYawDeg
@@ -817,6 +961,7 @@ fun MainApp(
                                 if (deltaYaw < -180f) deltaYaw += 360f
                                 stableYaw += deltaYaw * 0.20f
                                 ext.rotation = Float3(0f, stableYaw, 0f)
+                                ext.updateCameraOrientation(cameraNode.worldRotation)
                             }
 
                             // Advance to Step 1 (PULL_SAFETY_PIN) when worker approaches the fire with extinguisher
@@ -843,7 +988,7 @@ fun MainApp(
                                 isAimAlignedWithFireBase = isAimed
                             }
 
-                            val isSqueezing = handGestureState.isLeverSqueezeActive()
+                            val isSqueezing = handGestureState.isLeverSqueezeActive() || manualSqueezeActive
                             val isPinOut = ext?.isPinRemoved == true
                             val now = SystemClock.uptimeMillis()
 
@@ -924,6 +1069,7 @@ fun MainApp(
                                         }
                                         if (prog >= 1.0f) {
                                             mainHandler.post {
+                                                manualSqueezeActive = false
                                                 ext?.setDischarging(false)
                                                 videoFireNode?.stopFire()
                                                 audioManager.stopHazardSound()
@@ -1204,6 +1350,27 @@ fun MainApp(
                                 TrainingState.SWEEP_SIDE_TO_SIDE,
                                 TrainingState.DISCHARGE_EXTINGUISHER
                             )
+                    val isAlarmPulledBadge = fireAlarmNode?.isPulled == true || currentState in listOf(
+                        TrainingState.FIRE_ALARM_ACTIVATED,
+                        TrainingState.GO_TO_EXTINGUISHER
+                    )
+                    if (isAlarmPulledBadge && !isExtHeld) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color(0xFFD32F2F).copy(alpha = 0.92f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = "🚨 EVACUATION ACTIVE",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
                     if (isExtHeld) {
                         Spacer(modifier = Modifier.width(6.dp))
                         val (procBg, procText) = when (currentState) {
@@ -1237,7 +1404,8 @@ fun MainApp(
             val instructionHeader = when (currentState) {
                 TrainingState.START, TrainingState.SCAN_FLOOR, TrainingState.PLACE_DOORWAY -> "Scan the floor to place the mine entrance."
                 TrainingState.ENTER_MINE -> stringResource(R.string.instr_enter_mine)
-                TrainingState.FIRE_DETECTED, TrainingState.GO_TO_EXTINGUISHER -> stringResource(R.string.instr_fire_detected)
+                TrainingState.FIRE_DETECTED, TrainingState.PULL_FIRE_ALARM -> stringResource(R.string.instr_pull_alarm)
+                TrainingState.FIRE_ALARM_ACTIVATED, TrainingState.GO_TO_EXTINGUISHER -> stringResource(R.string.instr_alarm_activated)
                 TrainingState.EXTINGUISHER_REACHED -> stringResource(R.string.instr_extinguisher_reached)
                 TrainingState.EXTINGUISHER_HELD -> stringResource(R.string.instr_extinguisher_held)
                 TrainingState.PULL_SAFETY_PIN -> "STEP 1: PULL SAFETY PIN"
@@ -1257,7 +1425,8 @@ fun MainApp(
             val instructionDesc = when (currentState) {
                 TrainingState.START, TrainingState.SCAN_FLOOR, TrainingState.PLACE_DOORWAY -> "Point camera at the floor until surface is detected, then tap."
                 TrainingState.ENTER_MINE -> if (doorDistance > 0) String.format(Locale.US, "Doorway: %.2f m ahead (Walk forward to enter)", doorDistance) else "Walk forward through doorway"
-                TrainingState.FIRE_DETECTED -> "Electrical fire ahead beside railway"
+                TrainingState.FIRE_DETECTED, TrainingState.PULL_FIRE_ALARM -> "Pinch (🤏) the PULL DOWN lever on the wall fire alarm"
+                TrainingState.FIRE_ALARM_ACTIVATED, TrainingState.GO_TO_EXTINGUISHER -> "Evacuation siren active! Proceed forward to the fire extinguisher"
                 TrainingState.EXTINGUISHER_REACHED -> "Bring thumb & index finger together (pinch 🤏) to pick up extinguisher"
                 TrainingState.EXTINGUISHER_HELD -> "Approach the electrical fire (~4m ahead)"
                 TrainingState.PULL_SAFETY_PIN -> "Pinch (🤏) the safety pin ring to remove it"
@@ -1375,6 +1544,25 @@ fun MainApp(
                     .padding(bottom = 80.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                if (currentState == TrainingState.PULL_FIRE_ALARM || (currentState == TrainingState.FIRE_DETECTED && fireAlarmNode?.isPulled == false)) {
+                    Button(
+                        onClick = {
+                            fireAlarmNode?.triggerAlarm()
+                            audioManager.playAlarmPullLatchSound()
+                            audioManager.startEvacuationSiren()
+                            audioManager.playSuccessChime()
+                            voiceManager.speak("Fire alarm activated! Evacuation siren initiated. Proceed to the fire extinguisher.")
+                            viewModel.updateState(TrainingState.FIRE_ALARM_ACTIVATED)
+                            viewModel.updateState(TrainingState.GO_TO_EXTINGUISHER)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F), contentColor = Color.White),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(50.dp)
+                    ) {
+                        Text("PULL FIRE ALARM (🤏)", fontWeight = FontWeight.Bold)
+                    }
+                }
+
                 if (currentState == TrainingState.PULL_SAFETY_PIN) {
                     Button(
                         onClick = {
@@ -1414,6 +1602,7 @@ fun MainApp(
                 if (currentState == TrainingState.SQUEEZE_LEVER) {
                     Button(
                         onClick = {
+                            manualSqueezeActive = true
                             extinguisherNode?.setLeverSqueezed(true)
                             extinguisherNode?.setDischarging(true)
                             audioManager.playLeverSqueezeSound()
@@ -1453,6 +1642,28 @@ fun MainApp(
                                 color = Color(0xFF00E676),
                                 trackColor = Color.DarkGray
                             )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            val isDischargingNow = manualSqueezeActive || handGestureState.isLeverSqueezeActive()
+                            Button(
+                                onClick = {
+                                    manualSqueezeActive = !manualSqueezeActive
+                                    if (manualSqueezeActive) {
+                                        audioManager.playExtinguisherDischarge(5000)
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isDischargingNow) Color(0xFFFF3D00) else Color(0xFF37474F),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(38.dp)
+                            ) {
+                                Text(
+                                    text = if (isDischargingNow) "DISCHARGING FOG (TAP TO PAUSE)" else "RESUME DISCHARGE (TAP)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

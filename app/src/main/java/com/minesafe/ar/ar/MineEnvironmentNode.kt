@@ -99,7 +99,29 @@ class MineEnvironmentNode(
             // Left drift mid section
             Triple(Float3(-10.5f, 0.0f, -25.0f), 42000f, 7.5f),
             // Far left drift terminus
-            Triple(Float3(-13.5f, -0.6f, -25.0f), 38000f, 7.5f)
+            Triple(Float3(-13.5f, -0.6f, -25.0f), 38000f, 7.5f),
+            // Right branch junction / connecting chamber
+            Triple(Float3(0.0f, 1.8f, -26.0f), 45000f, 7.5f),
+            // Right curve bend
+            Triple(Float3(2.5f, 1.5f, -28.0f), 45000f, 7.5f),
+            // Right branch mid section
+            Triple(Float3(4.5f, 1.0f, -32.0f), 45000f, 7.5f),
+            // Right branch deep section
+            Triple(Float3(6.5f, 0.5f, -35.5f), 42000f, 7.5f),
+            // Right branch tracks section
+            Triple(Float3(6.0f, 0.2f, -38.5f), 42000f, 7.5f),
+            // Second mine diagonal deep
+            Triple(Float3(7.5f, 0.4f, -42.0f), 42000f, 7.5f),
+            // Second mine turn entrance
+            Triple(Float3(7.5f, 0.4f, -44.5f), 40000f, 7.5f),
+            // Second mine turn apex
+            Triple(Float3(6.2f, 0.4f, -47.0f), 40000f, 7.5f),
+            // Second mine upper drift
+            Triple(Float3(4.5f, 0.4f, -49.5f), 40000f, 7.5f),
+            // Second mine final approach
+            Triple(Float3(2.5f, 0.4f, -52.0f), 38000f, 7.5f),
+            // Second mine terminus end
+            Triple(Float3(-0.5f, 0.4f, -54.2f), 38000f, 7.5f)
         )
 
         for ((pos, intensity, falloff) in lights) {
