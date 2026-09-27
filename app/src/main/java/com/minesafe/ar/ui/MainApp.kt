@@ -888,6 +888,7 @@ fun MainApp(
                         if (mineCont != null && isAlarmPulled && evacuationHologramNode == null) {
                             val holo = EvacuationHologramNode(
                                 engine = engine,
+                                modelLoader = modelLoader,
                                 bodyMaterial = holoCyanMat,
                                 accentMaterial = holoAccentMat,
                                 headlampMaterial = holoHeadlampMat,
